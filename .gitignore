@@ -5,4 +5,4 @@ node_modules/
 *.log
 *.db
 /backend/schemas/memo_prompts_private.json
-
+.env
