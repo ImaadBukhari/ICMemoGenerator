@@ -1,0 +1,784 @@
+import os
+from typing import Dict, Any, List, Optional, Tuple
+from sqlalchemy.orm import Session
+from docx import Document
+from docx.shared import Inches, Pt
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.style import WD_STYLE_TYPE
+from docx.enum.table import WD_TABLE_ALIGNMENT
+from docx.oxml.shared import OxmlElement, qn
+from datetime import datetime
+import tempfile
+import re
+
+from docx.shared import Inches, Pt, RGBColor
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+
+
+from backend.db.models import MemoRequest, MemoSection
+
+def create_memo_styles(doc: Document):
+    """Create custom styles for the memo document"""
+    
+    styles = doc.styles
+    
+    # Choose your font here - change this to whatever you want
+    DOCUMENT_FONT = 'Bangla Sangam MN'  # Change to: 'Times New Roman', 'Arial', etc.
+    
+    # Title style
+    if 'Memo Title' not in [s.name for s in styles]:
+        title_style = styles.add_style('Memo Title', WD_STYLE_TYPE.PARAGRAPH)
+        title_font = title_style.font
+        title_font.name = DOCUMENT_FONT
+        title_font.size = Pt(14)
+        title_font.bold = True
+        title_style.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        title_style.paragraph_format.space_after = Pt(14)
+    
+    # Company name style
+    if 'Company Name' not in [s.name for s in styles]:
+        company_style = styles.add_style('Company Name', WD_STYLE_TYPE.PARAGRAPH)
+        company_font = company_style.font
+        company_font.name = DOCUMENT_FONT
+        company_font.size = Pt(12)
+        company_font.bold = True
+        company_style.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        company_style.paragraph_format.space_after = Pt(12)
+    
+    # Section heading style
+    if 'Section Heading' not in [s.name for s in styles]:
+        heading_style = styles.add_style('Section Heading', WD_STYLE_TYPE.PARAGRAPH)
+        heading_font = heading_style.font
+        heading_font.name = DOCUMENT_FONT
+        heading_font.size = Pt(12)
+        heading_font.bold = True
+        heading_font.color.rgb = None  # Default color
+        heading_style.paragraph_format.space_before = Pt(18)  # More space before
+        heading_style.paragraph_format.space_after = Pt(12)   # More space after
+    
+    # Subsection heading style
+    if 'Subsection Heading' not in [s.name for s in styles]:
+        sub_heading_style = styles.add_style('Subsection Heading', WD_STYLE_TYPE.PARAGRAPH)
+        sub_heading_font = sub_heading_style.font
+        sub_heading_font.name = DOCUMENT_FONT
+        sub_heading_font.size = Pt(10)
+        sub_heading_font.bold = True
+        sub_heading_style.paragraph_format.space_before = Pt(12)
+        sub_heading_style.paragraph_format.space_after = Pt(8)
+    
+    # Assessment table heading style - IMPROVED SPACING
+    if 'Assessment Table Heading' not in [s.name for s in styles]:
+        assessment_table_style = styles.add_style('Assessment Table Heading', WD_STYLE_TYPE.PARAGRAPH)
+        assessment_table_font = assessment_table_style.font
+        assessment_table_font.name = DOCUMENT_FONT
+        assessment_table_font.size = Pt(12)  # Slightly larger
+        assessment_table_font.bold = True
+        assessment_table_style.paragraph_format.space_before = Pt(24)  # More space before
+        assessment_table_style.paragraph_format.space_after = Pt(12)   # Space after
+    
+    # Body text style
+    if 'Memo Body' not in [s.name for s in styles]:
+        body_style = styles.add_style('Memo Body', WD_STYLE_TYPE.PARAGRAPH)
+        body_font = body_style.font
+        body_font.name = DOCUMENT_FONT
+        body_font.size = Pt(10)
+        body_style.paragraph_format.line_spacing = 1.2  # Better line spacing
+        body_style.paragraph_format.space_after = Pt(8)  # More space after paragraphs
+    
+    # List Bullet style - IMPROVED SPACING
+    try:
+        list_bullet_style = styles['List Bullet']
+        list_bullet_font = list_bullet_style.font
+        list_bullet_font.name = DOCUMENT_FONT
+        list_bullet_font.size = Pt(10)
+        list_bullet_style.paragraph_format.space_after = Pt(4)  # Space between bullets
+    except KeyError:
+        # Create List Bullet style if it doesn't exist
+        list_bullet_style = styles.add_style('List Bullet', WD_STYLE_TYPE.PARAGRAPH)
+        list_bullet_font = list_bullet_style.font
+        list_bullet_font.name = DOCUMENT_FONT
+        list_bullet_font.size = Pt(10)
+        list_bullet_style.paragraph_format.left_indent = Inches(0.25)
+        list_bullet_style.paragraph_format.space_after = Pt(4)  # Space between bullets
+        list_bullet_style.paragraph_format.line_spacing = 1.2  # Better line spacing
+
+def clean_markdown_formatting(content: str, section_name: str) -> str:
+    """
+    Clean markdown formatting from content based on section type
+    """
+    # For executive summary and company snapshot, remove ## and ### headers entirely
+    if section_name in ['executive_summary', 'company_snapshot']:
+        # Remove lines that start with ##, ###, or ####
+        lines = content.split('\n')
+        cleaned_lines = []
+        for line in lines:
+            stripped_line = line.strip()
+            if not (stripped_line.startswith('####') or stripped_line.startswith('###') or stripped_line.startswith('##')):
+                cleaned_lines.append(line)
+        content = '\n'.join(cleaned_lines)
+    
+    # Remove extra whitespace and normalize line breaks
+    content = re.sub(r'\n\s*\n\s*\n', '\n\n', content)  # Max 2 consecutive line breaks
+    content = content.strip()
+    
+    return content
+
+def parse_formatted_content(content: str, section_name: str) -> List[Dict[str, Any]]:
+    """
+    Parse content and identify different formatting elements
+    Returns list of content blocks with formatting info
+    """
+    cleaned_content = clean_markdown_formatting(content, section_name)
+    
+    content_blocks = []
+    lines = cleaned_content.split('\n')
+    current_paragraph = []
+    
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        stripped_line = line.strip()
+        
+        # Handle ### headers - convert to subsection headers (NOT ####)
+        if (stripped_line.startswith('###') and not stripped_line.startswith('####') and 
+            section_name not in ['executive_summary', 'company_snapshot']):
+            # Add current paragraph if exists
+            if current_paragraph:
+                content_blocks.append({
+                    'type': 'paragraph',
+                    'content': '\n'.join(current_paragraph).strip()
+                })
+                current_paragraph = []
+            
+            # Add subsection header
+            header_text = stripped_line.replace('###', '').strip()
+            if header_text:
+                content_blocks.append({
+                    'type': 'subsection_header',
+                    'content': header_text
+                })
+        
+        # Handle ## headers - convert to subsection headers
+        elif (stripped_line.startswith('##') and section_name not in ['executive_summary', 'company_snapshot']):
+            # Add current paragraph if exists
+            if current_paragraph:
+                content_blocks.append({
+                    'type': 'paragraph',
+                    'content': '\n'.join(current_paragraph).strip()
+                })
+                current_paragraph = []
+            
+            # Add section header
+            header_text = stripped_line.replace('##', '').strip()
+            if header_text:
+                content_blocks.append({
+                    'type': 'subsection_header',
+                    'content': header_text
+                })
+        
+        # Handle #### headers - convert to bold text WITHIN paragraphs (not separate)
+        elif stripped_line.startswith('####'):
+            # Convert #### to **bold** format and add to current paragraph
+            bold_text = stripped_line.replace('####', '').strip()
+            if bold_text:
+                # Add as **bold** text to current paragraph
+                current_paragraph.append(f"**{bold_text}**")
+        
+        # Handle empty lines
+        elif not stripped_line:
+            if current_paragraph:
+                content_blocks.append({
+                    'type': 'paragraph',
+                    'content': '\n'.join(current_paragraph).strip()
+                })
+                current_paragraph = []
+        
+        # Handle regular content lines
+        else:
+            current_paragraph.append(line)
+        
+        i += 1
+    
+    # Add final paragraph
+    if current_paragraph:
+        content_blocks.append({
+            'type': 'paragraph',
+            'content': '\n'.join(current_paragraph).strip()
+        })
+    
+    return content_blocks
+
+def add_formatted_text_to_paragraph(paragraph, text: str, font_name: str = 'Bangla Sangam MN', font_size: int = 10):
+    """
+    Add text to a paragraph with proper bold formatting for **text** and consistent font
+    """
+    # Split text by bold markers
+    parts = re.split(r'\*\*([^*]+)\*\*', text)
+    
+    for i, part in enumerate(parts):
+        if not part:  # Skip empty parts
+            continue
+            
+        if i % 2 == 0:  # Regular text (even indices)
+            run = paragraph.add_run(part)
+            run.font.name = font_name
+            run.font.size = Pt(font_size)
+        else:  # Bold text (odd indices, content between **)
+            run = paragraph.add_run(part)
+            run.bold = True
+            run.font.name = font_name
+            run.font.size = Pt(font_size)
+
+def extract_rating_from_content(content: str) -> Tuple[Optional[str], str]:
+    """
+    Extract rating number and clean description from assessment content
+    Returns: (rating, cleaned_content)
+    """
+    # Look for rating patterns like "Rating: 7/10", "Score: 8", "7 out of 10", etc.
+    rating_patterns = [
+        r'rating[:\s]+(\d+)(?:/10|\s*out\s*of\s*10)?',
+        r'score[:\s]+(\d+)(?:/10|\s*out\s*of\s*10)?',
+        r'(\d+)/10',
+        r'(\d+)\s*out\s*of\s*10',
+        r'rating[:\s]+(\d+)',
+        r'score[:\s]+(\d+)'
+    ]
+    
+    rating = None
+    for pattern in rating_patterns:
+        match = re.search(pattern, content, re.IGNORECASE)
+        if match:
+            rating = f"{match.group(1)}/10"
+            break
+    
+    # Clean the content - remove redundant rating statements
+    cleaned_content = content
+    for pattern in rating_patterns:
+        cleaned_content = re.sub(pattern, '', cleaned_content, flags=re.IGNORECASE)
+    
+    # Clean up extra whitespace and formatting
+    cleaned_content = re.sub(r'\n\s*\n', '\n\n', cleaned_content)
+    cleaned_content = cleaned_content.strip()
+    
+    return rating, cleaned_content
+
+def create_assessment_table(doc: Document, assessment_sections: Dict[str, MemoSection]):
+    """Create a professional assessment summary table with improved spacing"""
+    
+    # Set the font for table content - consistent with document
+    TABLE_FONT = 'Bangla Sangam MN'
+    
+    # Add spacing before table
+    doc.add_paragraph()  # Extra spacing above table
+    
+    # Add table heading with better spacing
+    table_heading = doc.add_paragraph("Investment Assessment Summary", style='Assessment Table Heading')
+    table_heading.paragraph_format.space_after = Pt(12)  # More space after heading
+    
+    # Create table with 3 columns: Category, Rating, Key Points
+    table = doc.add_table(rows=1, cols=3)
+    table.style = 'Table Grid'
+    table.alignment = WD_TABLE_ALIGNMENT.LEFT
+    
+    # Set column widths
+    table.columns[0].width = Inches(2.2)  # Category - slightly wider
+    table.columns[1].width = Inches(1.0)  # Rating  
+    table.columns[2].width = Inches(4.3)  # Key Points - slightly narrower for better balance
+    
+    # Set table margins and spacing
+    for row in table.rows:
+        row.height = Inches(0.4)  # Minimum row height for better spacing
+        
+    # Header row
+    header_cells = table.rows[0].cells
+    header_cells[0].text = "Assessment Category"
+    header_cells[1].text = "Rating"
+    header_cells[2].text = "Key Points"
+    
+    # Format header row with gray background and white text
+    for cell in header_cells:
+        # Set background color using proper XML method
+        tc_pr = cell._tc.get_or_add_tcPr()
+        shd = OxmlElement('w:shd')
+        shd.set(qn('w:fill'), "434343")  # Gray background
+        tc_pr.append(shd)
+        
+        # Add cell margins for better spacing
+        tc_mar = OxmlElement('w:tcMar')
+        
+        # Set margins: top, left, bottom, right (in twentieths of a point)
+        for margin_name, margin_value in [('top', '120'), ('left', '120'), ('bottom', '120'), ('right', '120')]:
+            margin_elem = OxmlElement(f'w:{margin_name}')
+            margin_elem.set(qn('w:w'), margin_value)
+            margin_elem.set(qn('w:type'), 'dxa')
+            tc_mar.append(margin_elem)
+        
+        tc_pr.append(tc_mar)
+        
+        # Format text - white and bold
+        for paragraph in cell.paragraphs:
+            paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+            paragraph.paragraph_format.space_after = Pt(0)  # Remove extra paragraph spacing
+            for run in paragraph.runs:
+                run.font.name = TABLE_FONT
+                run.font.bold = True
+                run.font.size = Pt(10)
+                run.font.color.rgb = RGBColor(255, 255, 255)  # White text
+    
+    # Assessment categories mapping
+    assessment_mapping = {
+        "assessment_people": "Team & Leadership",
+        "assessment_market_opportunity": "Market Opportunity", 
+        "assessment_product": "Product & Technology",
+        "assessment_financials": "Financial Health",
+        "assessment_traction_validation": "Traction & Validation",
+        "assessment_deal_considerations": "Deal Structure"
+    }
+    
+    # Add rows for each assessment
+    for section_key, section_title in assessment_mapping.items():
+        if section_key in assessment_sections:
+            section = assessment_sections[section_key]
+            
+            # Extract rating and clean content
+            rating, cleaned_content = extract_rating_from_content(section.content)
+            
+            # Add row to table
+            row_cells = table.add_row().cells
+            
+            # Set minimum row height for better spacing
+            table.rows[-1].height = Inches(0.6)  # Taller rows for content
+            
+            # Category name (first column) with light green background
+            row_cells[0].text = section_title
+            
+            # Set light green background for category cell
+            tc_pr = row_cells[0]._tc.get_or_add_tcPr()
+            shd = OxmlElement('w:shd')
+            shd.set(qn('w:fill'), "a6ddce")  # Light green background
+            tc_pr.append(shd)
+            
+            # Add cell margins for category cell
+            tc_mar = OxmlElement('w:tcMar')
+            for margin_name, margin_value in [('top', '120'), ('left', '120'), ('bottom', '120'), ('right', '120')]:
+                margin_elem = OxmlElement(f'w:{margin_name}')
+                margin_elem.set(qn('w:w'), margin_value)
+                margin_elem.set(qn('w:type'), 'dxa')
+                tc_mar.append(margin_elem)
+            tc_pr.append(tc_mar)
+            
+            # Format category cell text
+            for paragraph in row_cells[0].paragraphs:
+                paragraph.paragraph_format.space_after = Pt(0)
+                for run in paragraph.runs:
+                    run.font.name = TABLE_FONT
+                    run.font.bold = True
+                    run.font.size = Pt(10)
+                    run.font.color.rgb = RGBColor(0, 0, 0)  # Black text
+            
+            # Rating (second column) - add margins
+            rating_text = rating if rating else "N/A"
+            row_cells[1].text = rating_text
+            row_cells[1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+            
+            # Add margins to rating cell
+            tc_pr_rating = row_cells[1]._tc.get_or_add_tcPr()
+            tc_mar_rating = OxmlElement('w:tcMar')
+            for margin_name, margin_value in [('top', '120'), ('left', '120'), ('bottom', '120'), ('right', '120')]:
+                margin_elem = OxmlElement(f'w:{margin_name}')
+                margin_elem.set(qn('w:w'), margin_value)
+                margin_elem.set(qn('w:type'), 'dxa')
+                tc_mar_rating.append(margin_elem)
+            tc_pr_rating.append(tc_mar_rating)
+            
+            # Format rating cell
+            for paragraph in row_cells[1].paragraphs:
+                paragraph.paragraph_format.space_after = Pt(0)
+                for run in paragraph.runs:
+                    run.font.name = TABLE_FONT
+                    run.font.bold = True
+                    run.font.size = Pt(10)
+            
+            # Key points (third column) - add margins and better bullet spacing
+            key_points = summarize_assessment_content_with_spacing(cleaned_content)
+            row_cells[2].text = key_points
+            
+            # Add margins to key points cell
+            tc_pr_points = row_cells[2]._tc.get_or_add_tcPr()
+            tc_mar_points = OxmlElement('w:tcMar')
+            for margin_name, margin_value in [('top', '120'), ('left', '120'), ('bottom', '120'), ('right', '120')]:
+                margin_elem = OxmlElement(f'w:{margin_name}')
+                margin_elem.set(qn('w:w'), margin_value)
+                margin_elem.set(qn('w:type'), 'dxa')
+                tc_mar_points.append(margin_elem)
+            tc_pr_points.append(tc_mar_points)
+            
+            # Format key points cell
+            for paragraph in row_cells[2].paragraphs:
+                paragraph.paragraph_format.space_after = Pt(3)  # Small spacing between bullet lines
+                paragraph.paragraph_format.line_spacing = 1.2  # Better line spacing
+                for run in paragraph.runs:
+                    run.font.name = TABLE_FONT
+                    run.font.size = Pt(10)
+    
+    # Add spacing after table
+    doc.add_paragraph()  # Extra spacing below table
+    doc.add_paragraph()  # Even more spacing before next content
+
+def summarize_assessment_content_with_spacing(content: str) -> str:
+    """Summarize assessment content with better bullet point spacing"""
+    
+    # Clean the content first
+    cleaned_content = clean_table_content(content)
+    
+    # Split content into sentences/points
+    sentences = re.split(r'[.!?]+', cleaned_content)
+    sentences = [s.strip() for s in sentences if s.strip() and len(s.strip()) > 10]
+    
+    # Take first few key sentences and format as bullet points
+    key_points = []
+    for sentence in sentences[:3]:  # Take up to 3 key points
+        if len(sentence) > 20:  # Only meaningful sentences
+            sentence = sentence.strip()
+            if not sentence.endswith('.'):
+                sentence += '.'
+            key_points.append(f"• {sentence}")
+    
+    # If we have fewer than 2 points, try to extract from original bullet points
+    if len(key_points) < 2:
+        # Look for sentences that might be key points
+        lines = cleaned_content.split('\n')
+        for line in lines:
+            clean_line = line.strip()
+            if len(clean_line) > 15 and clean_line not in [kp[2:] for kp in key_points]:
+                if not clean_line.endswith('.'):
+                    clean_line += '.'
+                key_points.append(f"• {clean_line}")
+                if len(key_points) >= 3:
+                    break
+    
+    # Join with line breaks for better spacing between bullets
+    return '\n\n'.join(key_points[:3]) if key_points else cleaned_content[:150] + "..." if len(cleaned_content) > 150 else cleaned_content
+
+def clean_table_content(content: str) -> str:
+    """
+    Thoroughly clean content for table display - remove all markdown formatting
+    """
+    # Remove all hash markers (# ## ### #### etc.)
+    content = re.sub(r'#+\s*', '', content)
+    
+    # Remove bold markers but keep the text
+    content = re.sub(r'\*\*([^*]+)\*\*', r'\1', content)
+    
+    # Remove bullet point markers at start of lines (we'll add our own)
+    content = re.sub(r'^[•\-]\s*', '', content, flags=re.MULTILINE)
+    
+    # Clean up multiple spaces and line breaks
+    content = re.sub(r'\s+', ' ', content)  # Multiple spaces to single space
+    content = re.sub(r'\n\s*\n', '\n', content)  # Multiple line breaks to single
+    
+    # Remove any remaining markdown artifacts
+    content = re.sub(r'[`~_]', '', content)  # Remove backticks, tildes, underscores
+    
+    return content.strip()
+
+
+def add_header_footer(doc: Document, company_name: str, generation_date: str):
+    """Add header and footer to the document"""
+    
+    HEADER_FOOTER_FONT = 'Bangla Sangam MN'  # Change this to match your preferred font
+    
+    # Add header
+    header = doc.sections[0].header
+    header_para = header.paragraphs[0]
+    header_para.text = f"CONFIDENTIAL - Investment Committee Memo"
+    header_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    
+    # Format header font
+    for run in header_para.runs:
+        run.font.name = HEADER_FOOTER_FONT
+        run.font.size = Pt(8)
+    
+    # Add footer
+    footer = doc.sections[0].footer
+    footer_para = footer.paragraphs[0]
+    footer_para.text = f"Generated on {generation_date} | Page "
+    footer_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    
+    # Format footer font
+    for run in footer_para.runs:
+        run.font.name = HEADER_FOOTER_FONT
+        run.font.size = Pt(8)
+
+def format_section_content(content: str, section_name: str) -> List[Dict[str, Any]]:
+    """
+    Format section content into structured blocks with proper formatting
+    """
+    content_blocks = parse_formatted_content(content, section_name)
+    formatted_blocks = []
+    
+    for block in content_blocks:
+        if block['type'] == 'paragraph' and block['content']:
+            # Handle bullet points
+            lines = block['content'].split('\n')
+            current_list_items = []
+            current_paragraph_lines = []
+            
+            for line in lines:
+                stripped = line.strip()
+                if stripped.startswith('- ') or stripped.startswith('• '):
+                    # Add current paragraph if exists
+                    if current_paragraph_lines:
+                        formatted_blocks.append({
+                            'type': 'paragraph',
+                            'content': '\n'.join(current_paragraph_lines).strip()
+                        })
+                        current_paragraph_lines = []
+                    
+                    # Add to list items
+                    bullet_text = stripped[2:].strip() if stripped.startswith('- ') else stripped[2:].strip()
+                    current_list_items.append(bullet_text)
+                else:
+                    # Add current list if exists
+                    if current_list_items:
+                        formatted_blocks.append({
+                            'type': 'bullet_list',
+                            'items': current_list_items[:]
+                        })
+                        current_list_items = []
+                    
+                    # Add to paragraph
+                    if stripped:  # Only add non-empty lines
+                        current_paragraph_lines.append(line)
+            
+            # Add remaining content
+            if current_list_items:
+                formatted_blocks.append({
+                    'type': 'bullet_list',
+                    'items': current_list_items
+                })
+            if current_paragraph_lines:
+                formatted_blocks.append({
+                    'type': 'paragraph',
+                    'content': '\n'.join(current_paragraph_lines).strip()
+                })
+        
+        else:
+            formatted_blocks.append(block)
+    
+    return formatted_blocks
+
+def add_section_to_document(doc: Document, section_name: str, content: str, section_order: Dict[str, str]):
+    """Add a section to the Word document with enhanced formatting"""
+    
+    BODY_FONT = 'Bangla Sangam MN'  # Consistent font for all body text
+    BODY_SIZE = 10
+    
+    # Get section title
+    section_title = section_order.get(section_name, section_name.replace('_', ' ').title())
+    
+    # Add section heading
+    heading_para = doc.add_paragraph(section_title, style='Section Heading')
+    
+    # Format and add content with enhanced parsing
+    formatted_blocks = format_section_content(content, section_name)
+    
+    for block in formatted_blocks:
+        if block['type'] == 'subsection_header':
+            # Add subsection header
+            sub_para = doc.add_paragraph(block['content'], style='Subsection Heading')
+        
+        elif block['type'] == 'paragraph':
+            # Add paragraph with bold formatting (#### becomes **bold** within paragraph)
+            para = doc.add_paragraph(style='Memo Body')
+            add_formatted_text_to_paragraph(para, block['content'], BODY_FONT, BODY_SIZE)
+        
+        elif block['type'] == 'bullet_list':
+            # Add bullet list items with consistent formatting
+            for item in block['items']:
+                bullet_para = doc.add_paragraph(style='List Bullet')
+                add_formatted_text_to_paragraph(bullet_para, item, BODY_FONT, BODY_SIZE)
+
+def generate_word_document(db: Session, memo_request_id: int) -> Optional[str]:
+    """
+    Generate a Word document from memo sections stored in the database
+    
+    Returns:
+        Path to the generated Word document, or None if generation fails
+    """
+    
+    try:
+        print(f"Starting document generation for memo {memo_request_id}")
+        
+        # Check if python-docx is available
+        try:
+            from docx import Document
+            print("✅ python-docx is available")
+        except ImportError as e:
+            print(f"❌ python-docx not available: {e}")
+            return None
+        
+        # Get memo request
+        memo_request = db.query(MemoRequest).filter(
+            MemoRequest.id == memo_request_id
+        ).first()
+        
+        if not memo_request:
+            print(f"❌ Memo request {memo_request_id} not found")
+            return None
+        
+        print(f"✅ Found memo request for {memo_request.company_name}")
+        
+        # Get completed sections
+        sections = db.query(MemoSection).filter(
+            MemoSection.memo_request_id == memo_request_id,
+            MemoSection.status == "completed"
+        ).order_by(MemoSection.created_at).all()
+        
+        print(f"Found {len(sections)} completed sections")
+        
+        if not sections:
+            print("❌ No completed sections found for this memo")
+            return None
+        
+        for section in sections:
+            print(f"  - {section.section_name}: {len(section.content) if section.content else 0} chars")
+        
+        # Create document
+        print("Creating Word document...")
+        doc = Document()
+        create_memo_styles(doc)
+        
+        # Add document title and company info
+        title_para = doc.add_paragraph("INVESTMENT COMMITTEE MEMO", style='Memo Title')
+        company_para = doc.add_paragraph(memo_request.company_name, style='Company Name')
+        
+        # Add generation info
+        generation_date = datetime.now().strftime("%B %d, %Y")
+        info_para = doc.add_paragraph(f"Generated: {generation_date}")
+        info_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        doc.add_paragraph()  # Spacing
+        
+        print("✅ Added title and header")
+        
+        # Add header and footer
+        add_header_footer(doc, memo_request.company_name, generation_date)
+        
+        # Create sections lookup
+        sections_dict = {section.section_name: section for section in sections}
+        
+        # Separate assessment sections from main sections
+        assessment_sections = {k: v for k, v in sections_dict.items() if k.startswith('assessment_')}
+        main_sections_dict = {k: v for k, v in sections_dict.items() if not k.startswith('assessment_')}
+        
+        print(f"Main sections: {list(main_sections_dict.keys())}")
+        print(f"Assessment sections: {list(assessment_sections.keys())}")
+        
+        # Add Executive Summary first
+        if "executive_summary" in main_sections_dict:
+            print("Adding executive summary...")
+            add_section_to_document(doc, "executive_summary", main_sections_dict["executive_summary"].content, 
+                                  {"executive_summary": "Executive Summary"})
+            doc.add_paragraph()  # Spacing
+        
+        # Add Assessment Summary Table
+        if assessment_sections:
+            print("Adding assessment table...")
+            create_assessment_table(doc, assessment_sections)
+            doc.add_page_break()
+        
+        # Main section order (excluding executive summary since we added it first)
+        main_section_order = {
+            "company_snapshot": "Company Snapshot",
+            "people": "Team & Leadership",
+            "market_opportunity": "Market Opportunity", 
+            "competitive_landscape": "Competitive Landscape",
+            "product": "Product & Technology",
+            "financial": "Financial Analysis",
+            "traction_validation": "Traction & Validation",
+            "deal_considerations": "Deal Considerations"
+        }
+        
+        # Add main sections in proper order with enhanced formatting
+        for section_key, section_title in main_section_order.items():
+            if section_key in main_sections_dict:
+                print(f"Adding section with formatting: {section_title}")
+                add_section_to_document(doc, section_key, main_sections_dict[section_key].content, main_section_order)
+                doc.add_page_break()
+        
+        # Generate filename and save
+        safe_company_name = "".join(c for c in memo_request.company_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
+        filename = f"IC_Memo_{safe_company_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
+        
+        # Create documents directory if it doesn't exist
+        docs_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'generated_docs')
+        print(f"Documents directory: {docs_dir}")
+        
+        try:
+            os.makedirs(docs_dir, exist_ok=True)
+            print("✅ Documents directory created/verified")
+        except Exception as e:
+            print(f"❌ Failed to create documents directory: {e}")
+            return None
+        
+        file_path = os.path.join(docs_dir, filename)
+        print(f"Saving document to: {file_path}")
+        
+        try:
+            doc.save(file_path)
+            print(f"✅ Word document saved successfully with enhanced formatting")
+        except Exception as e:
+            print(f"❌ Failed to save document: {e}")
+            return None
+        
+        # Verify file was created
+        if os.path.exists(file_path):
+            file_size = os.path.getsize(file_path)
+            print(f"✅ Document file exists, size: {file_size} bytes")
+            return file_path
+        else:
+            print("❌ Document file was not created")
+            return None
+        
+    except Exception as e:
+        print(f"❌ Failed to generate Word document: {str(e)}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
+        return None
+
+def get_document_summary(db: Session, memo_request_id: int) -> Dict[str, Any]:
+    """Get a summary of document generation status"""
+    
+    memo_request = db.query(MemoRequest).filter(
+        MemoRequest.id == memo_request_id
+    ).first()
+    
+    if not memo_request:
+        return {"error": "Memo request not found"}
+    
+    sections = db.query(MemoSection).filter(
+        MemoSection.memo_request_id == memo_request_id
+    ).all()
+    
+    completed_sections = [s for s in sections if s.status == "completed"]
+    failed_sections = [s for s in sections if s.status == "failed"]
+    
+    return {
+        "memo_id": memo_request_id,
+        "company_name": memo_request.company_name,
+        "total_sections": len(sections),
+        "completed_sections": len(completed_sections),
+        "failed_sections": len(failed_sections),
+        "success_rate": len(completed_sections) / len(sections) if sections else 0,
+        "status": memo_request.status,
+        "sections_detail": [
+            {
+                "name": s.section_name,
+                "status": s.status,
+                "content_length": len(s.content) if s.content else 0,
+                "error": s.error_log if s.status == "failed" else None
+            }
+            for s in sections
+        ]
+    }
