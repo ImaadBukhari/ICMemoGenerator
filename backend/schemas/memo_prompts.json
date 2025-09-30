@@ -1,0 +1,35 @@
+{
+    "executive_summary": "Based on the data provided, Write a concise executive summary for an investment memo. Begin by clearly stating the problem the market currently has, followed by the company's solution. Include a description of the product or demo if available. Then summarize the key deal terms (stage, valuation, round size, ARR multiple, security type, use of funds, and other investors) briefly if known. Conclude with a clear investment recommendation, listing the 2-3 key reasons to invest and the 2-3 key risks.",
+  
+    "assessment_summary": {
+    "people": "Based on the data provided, Assess the founding team and leadership. Justify the rating by considering pedigree, technical depth, execution ability, leadership track record, and the presence of at least one top 1% technical founder. Summarize team size, structure, advisors, and existing investors. End with a 1–10 rating for People, with justification.",
+    
+    "market_opportunity": "Based on the data provided, Assess the market opportunity. Justify the rating by analyzing the market size (TAM/SAM/SOM), growth trajectory (historical and projected), timing, regulatory tailwinds/barriers, and disruption trends. Conclude with a 1–10 rating for Market Opportunity, with reasoning.",
+    
+    "product": "Based on the data provided, Assess the product. Justify the rating by considering product differentiation, defensibility (IP, data, network effects), scalability potential, switching costs, and current adoption. Include risks around product-market fit. Conclude with a 1–10 rating for Product.",
+    
+    "financials": "Based on the data provided, Assess the financial health and trajectory. Justify the rating by analyzing revenue quality (recurring %, ARR growth, gross/net retention), customer economics (LTV/CAC, CAC payback), path to profitability, and capital efficiency (burn rate, runway). Conclude with a 1–10 rating for Financials.",
+    
+    "traction_validation": "Based on the data provided, Assess traction and validation. Justify the rating by analyzing customer adoption, cornerstone partnerships, customer concentration risks, and market validation. Conclude with a 1–10 rating for Traction & Validation.",
+    
+    "deal_considerations": "Based on the data provided, Assess deal considerations. Justify the rating by analyzing exit opportunities (M&A or IPO), expected returns (IRR, MOIC), valuation multiples, and deal terms (preferences, governance, pro-rata). Conclude with a 1–10 rating for Deal Considerations."
+  },
+  
+    "company_snapshot": "Based on the data provided, Provide a short company snapshot including company background, HQ location, and any other locations.",
+  
+    "people": "Based on the data provided, List the founders and key management team. For each, include a short biography highlighting relevant experience, pedigree, leadership qualities, and notable achievements. Mention the size of the team, organizational structure, and board/advisors. Include information on existing investors and board of directors, emphasizing their reputations and value-add.",
+  
+    "market_opportunity": "Based on the data provided, Write the investment thesis. Where is the market going? How is it being disrupted? Describe the overall market size (regional and global), growth potential (historical and projected), addressable segment (beachhead market), and barriers to entry.",
+  
+    "competitive_landscape": "Based on the data provided, List the key competitors with details like year of launch, revenue, employees, key customers, key products, investors, margins, valuation, and other remarks. Summarize how the target company is positioned relative to these competitors and what barriers exist.",
+  
+    "product": "Based on the data provided, Describe the product’s features, target customers, tiers, pricing, and revenue model. Highlight uniqueness/IP (data, distribution, talent, patents, contracts). Explain scalability potential and switching costs for customers.",
+  
+    "financial": "Based on the data provided, Summarize the company's financials: revenue quality (ARR, gross/net retention, ARPU, gross margin, % recurring revenue), growth metrics (LTV/CAC, CAC payback, pipeline conversion, product mix), path to profitability (unit economics, DAU/MAU, breakeven timeline), and capital efficiency (burn rate, cash balance, runway).",
+  
+    "traction_validation": "Based on the data provided, Summarize evidence of traction and validation: customer adoption and retention, cornerstone partnerships, and customer concentration. Explain how this supports the company's credibility and growth potential.",
+  
+    "deal_considerations": "Based on the data provided, Evaluate exit considerations (acquisition or IPO prospects), expected time to exit, projected returns (IRR, MOIC, multiples), comparables (public/private), and deal terms (valuation, liquidation preferences, governance rights, pro-rata, tag/drag)."
+  
+  }
+  
