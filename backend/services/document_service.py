@@ -16,7 +16,7 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 
 
-from backend.db.models import MemoRequest, MemoSection
+from db.models import MemoRequest, MemoSection
 
 def create_memo_styles(doc: Document):
     """Create custom styles for the memo document"""

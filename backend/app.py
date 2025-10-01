@@ -1,55 +1,52 @@
-from fastapi import FastAPI, Depends, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Session
 import os
-from dotenv import load_dotenv
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from database import engine
+from db import models
 
-from backend.db.models import Base
-from backend.routes.auth import router as auth_router
-from backend.routes.memo import router as memo_router
-from backend.routes.affinity import router as affinity_router
-from backend.routes.data import router as data_router
+# Import routers
+from routes import auth, memo, data, affinity
 
-load_dotenv()
+# Create database tables (only in development)
+if os.getenv("ENVIRONMENT") != "production":
+    models.Base.metadata.create_all(bind=engine)
 
-# Database setup
-DATABASE_URL = os.getenv("DATABASE_URL")
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+app = FastAPI(
+    title="IC Memo Generator API",
+    description="Investment Committee Memo Generation System",
+    version="1.0.0"
+)
 
-# Create tables
-Base.metadata.create_all(bind=engine)
+# CORS configuration
+origins = [
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "https://icmemo-frontend-khp3cr2i6q-uc.a.run.app",
+    "https://icmemo-frontend-742031099725.us-central1.run.app",
+]
 
-app = FastAPI(title="IC Memo Generator", version="1.0.0")
+frontend_url = os.getenv("FRONTEND_URL")
+if frontend_url:
+    origins.append(frontend_url)
 
-# CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", os.getenv("FRONTEND_URL", "http://localhost:3000")],
+    allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],
 )
 
-# Database dependency
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
 # Include routers
-app.include_router(auth_router, prefix="/api")
-app.include_router(memo_router, prefix="/api")
-app.include_router(affinity_router, prefix="/api")
-app.include_router(data_router, prefix="/api")
+app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
+app.include_router(memo.router, prefix="/api/memo", tags=["memo"])
+app.include_router(data.router, prefix="/api/data", tags=["data"])
+app.include_router(affinity.router, prefix="/api/affinity", tags=["affinity"])
 
 @app.get("/")
 async def root():
-    return {"message": "IC Memo Generator API"}
+    return {"message": "IC Memo Generator API", "status": "running"}
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy"}
+    return {"status": "healthy", "environment": os.getenv("ENVIRONMENT", "development")}

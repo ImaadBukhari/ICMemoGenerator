@@ -2,8 +2,8 @@ import json
 import os
 from typing import Dict, Any, List, Optional
 from sqlalchemy.orm import Session
-from backend.db.models import MemoRequest, MemoSection
-from backend.services.gpt_service import generate_text
+from db.models import MemoRequest, MemoSection
+from services.gpt_service import generate_text
 
 # Load memo prompts
 def load_memo_prompts() -> Dict[str, Any]:

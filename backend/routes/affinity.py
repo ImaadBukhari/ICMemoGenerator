@@ -1,12 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List, Optional
 
-from backend.database import get_db
-from backend.auth import get_current_user
-from backend.db.models import User
-from backend.services.affinity_service import get_companies, get_company_details
+from database import get_db  # Remove 'backend.'
+from services.affinity_service import AffinityService  # Remove 'backend.'
 
+router = APIRouter()
+# ...rest of file
 router = APIRouter()
 
 @router.get("/affinity/companies")

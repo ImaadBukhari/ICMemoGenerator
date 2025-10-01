@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
-from backend.db.models import GoogleToken, User
+from db.models import GoogleToken, User
 
 # Config
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")

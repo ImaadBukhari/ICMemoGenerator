@@ -1,9 +1,9 @@
 from typing import Dict, Any, List
 from sqlalchemy.orm import Session
-from backend.db.models import User, Source
-from backend.services.affinity_service import get_company_details
-from backend.services.google_service import search_files, get_docs_service
-from backend.services.perplexity_service import search_company_comprehensive
+from db.models import User, Source
+from services.affinity_service import get_company_details
+from services.google_service import search_files, get_docs_service
+from services.perplexity_service import search_company_comprehensive
 
 def extract_text_from_doc(doc_content: Dict) -> str:
     """Extract plain text from Google Docs API response."""
@@ -101,7 +101,7 @@ def gather_perplexity_data(company_name: str) -> Dict[str, Any]:
     """
     try:
         # Use enhanced comprehensive search with stats
-        from backend.services.perplexity_service import search_company_comprehensive_with_stats
+        from services.perplexity_service import search_company_comprehensive_with_stats
         
         perplexity_data = search_company_comprehensive_with_stats(company_name)
         return {
