@@ -2,21 +2,25 @@ FROM --platform=linux/amd64 python:3.11-slim
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y gcc g++ && rm -rf /var/lib/apt/lists/*
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install
+# Copy requirements first for better caching
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy ALL backend code directly into /app
+# Copy application code
 COPY backend/ .
 
-# Now /app contains: app.py, database.py, db/, routes/, services/, etc.
-
-RUN useradd -m app && chown -R app:app /app
+# Create non-root user
+RUN useradd --create-home --shell /bin/bash app && chown -R app:app /app
 USER app
 
+# Expose port 8080
 EXPOSE 8080
 
-# Run from /app directory where all modules are at the root level
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080"]
+# Start uvicorn on port 8080 (Cloud Run sets PORT env var)
+CMD ["sh", "-c", "uvicorn app:app --host 0.0.0.0 --port ${PORT:-8080}"]

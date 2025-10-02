@@ -43,6 +43,15 @@ docker buildx build \
     --push \
     .
 
+# Build and push frontend image for AMD64
+echo -e "${YELLOW}🏗️  Building frontend image for AMD64...${NC}"
+docker buildx build \
+    --platform linux/amd64 \
+    -t gcr.io/$PROJECT_ID/icmemo-frontend:latest \
+    -f infra/Dockerfile.frontend \
+    --push \
+    .
+
 # Deploy backend service with Cloud SQL connection
 echo -e "${YELLOW}🚢 Deploying backend service with Cloud SQL...${NC}"
 gcloud run deploy icmemo-backend \
@@ -62,17 +71,6 @@ gcloud run deploy icmemo-backend \
 
 # Get backend URL
 BACKEND_URL=$(gcloud run services describe icmemo-backend --region=$REGION --format="value(status.url)")
-echo -e "${GREEN}Backend deployed at: $BACKEND_URL${NC}"
-
-# Build and push frontend image with backend URL
-echo -e "${YELLOW}🏗️  Building frontend image with API URL: $BACKEND_URL${NC}"
-docker buildx build \
-    --platform linux/amd64 \
-    --build-arg REACT_APP_API_URL=$BACKEND_URL \
-    -t gcr.io/$PROJECT_ID/icmemo-frontend:latest \
-    -f infra/Dockerfile.frontend \
-    --push \
-    .
 
 # Deploy frontend service
 echo -e "${YELLOW}🚢 Deploying frontend service...${NC}"
