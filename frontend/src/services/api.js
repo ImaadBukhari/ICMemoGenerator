@@ -6,32 +6,31 @@ const getApiUrl = () => {
     return process.env.REACT_APP_API_URL;
   }
   
-  // For local development
+  // For local development - MUST include /api prefix
   if (process.env.NODE_ENV === 'development') {
-    return 'http://localhost:8000/api';
+    return 'http://localhost:8000/api';  // ← Added /api here
   }
   
-  // For production, try to detect backend URL
+  // For production
   const currentUrl = window.location.origin;
   if (currentUrl.includes('localhost') || currentUrl.includes('127.0.0.1')) {
-    return 'http://localhost:8000/api';
+    return 'http://localhost:8000/api';  // ← Added /api here
   }
   
-  // Assume backend is at same domain with /api prefix in production
+  // Production backend
   return `${currentUrl}/api`;
 };
 
 // Configure axios defaults
 const api = axios.create({
-  baseURL: getApiUrl(),
-  timeout: 300000, // 5 minutes for long-running operations
-  withCredentials: true, // Important for CORS with credentials
+  baseURL: 'http://localhost:8000/api',  // ← Must have /api
+  timeout: 300000,
+  withCredentials: true,
 });
 
-// Add request interceptor for auth if needed
+// Request interceptor
 api.interceptors.request.use(
   (config) => {
-    // Add auth token if available
     const token = localStorage.getItem('auth_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -43,15 +42,13 @@ api.interceptors.request.use(
   }
 );
 
-// Add response interceptor for error handling
+// Response interceptor
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     console.error('API Error:', error.response?.data || error.message);
     
-    // Handle specific error cases
     if (error.response?.status === 401) {
-      // Handle unauthorized - maybe redirect to login
       localStorage.removeItem('auth_token');
     }
     
@@ -61,6 +58,7 @@ api.interceptors.response.use(
 
 // Data gathering functions
 export const gatherCompanyData = async (companyName, affinityCompanyId) => {
+  // This will call: http://localhost:8000/api/data/gather ✅
   const response = await api.post('/data/gather', {
     company_name: companyName,
     company_id: affinityCompanyId

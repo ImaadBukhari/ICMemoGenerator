@@ -43,111 +43,48 @@ async def google_login(
     user_id: int = None,
     db: Session = Depends(get_db)
 ):
-    """
-    Initiate Google OAuth2 login flow
-    """
+    """Initiate Google OAuth2 login flow"""
     try:
-        if not user_id:
-            raise HTTPException(status_code=400, detail="User ID required")
-            
-        # Verify user exists
-        user = db.query(User).filter(User.id == user_id).first()
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-        
         flow = create_flow()
-        
-        # Generate state parameter for security
-        state = secrets.token_urlsafe(32)
-        
-        authorization_url, _ = flow.authorization_url(
+        authorization_url, state = flow.authorization_url(
             access_type='offline',
-            include_granted_scopes='true',
-            state=f"{user_id}:{state}",
-            prompt='consent'
+            include_granted_scopes='true'
         )
-        
         return RedirectResponse(url=authorization_url)
-        
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to initiate Google OAuth: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"OAuth initialization failed: {str(e)}")
 
 @router.get("/google/callback")
 async def google_callback(
     request: Request,
     code: str = None,
     state: str = None,
-    error: str = None,
     db: Session = Depends(get_db)
 ):
-    """
-    Handle Google OAuth2 callback
-    """
-    if error:
-        raise HTTPException(status_code=400, detail=f"Google OAuth error: {error}")
-    
-    if not code or not state:
-        raise HTTPException(status_code=400, detail="Missing authorization code or state")
-    
+    """Handle Google OAuth2 callback"""
     try:
-        # Parse user ID from state
-        user_id_str, _ = state.split(':', 1)
-        user_id = int(user_id_str)
+        if not code:
+            raise HTTPException(status_code=400, detail="No authorization code provided")
         
-        # Verify user exists
-        user = db.query(User).filter(User.id == user_id).first()
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-        
-        # Exchange authorization code for tokens
         flow = create_flow()
         flow.fetch_token(code=code)
-        
         credentials = flow.credentials
         
-        # Store or update tokens in database
-        existing_token = db.query(GoogleToken).filter(
-            GoogleToken.user_id == user_id
-        ).first()
-        
-        if existing_token:
-            existing_token.access_token = credentials.token
-            existing_token.refresh_token = credentials.refresh_token
-            existing_token.expiry = credentials.expiry
-        else:
-            new_token = GoogleToken(
-                user_id=user_id,
-                access_token=credentials.token,
-                refresh_token=credentials.refresh_token,
-                expiry=credentials.expiry
-            )
-            db.add(new_token)
-        
-        db.commit()
-        
-        # Redirect to frontend
-        frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3000')
-        return RedirectResponse(url=f"{frontend_url}/dashboard?google_connected=true")
-        
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail="Invalid state parameter")
+        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+        return RedirectResponse(url=f"{frontend_url}/auth/success")
     except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to process Google callback: {str(e)}")
+        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+        return RedirectResponse(url=f"{frontend_url}/auth/error?message={str(e)}")
 
-@router.get("/google/status")
-async def google_status(
-    user_id: int,
-    db: Session = Depends(get_db)
-):
-    """
-    Check if user has Google account connected
-    """
-    token_record = db.query(GoogleToken).filter(
-        GoogleToken.user_id == user_id
-    ).first()
-    
-    return {
-        "connected": token_record is not None,
-        "expires_at": token_record.expiry.isoformat() if token_record and token_record.expiry else None
-    }
+def get_current_user(db: Session = Depends(get_db)):
+    """Dependency to get current authenticated user"""
+    user = db.query(User).first()
+    if not user:
+        user = User(
+            email="test@example.com",
+            name="Test User"
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    return user

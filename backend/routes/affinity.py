@@ -1,37 +1,38 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from typing import List, Dict, Any
 
-from database import get_db  # Remove 'backend.'
-from services.affinity_service import AffinityService  # Remove 'backend.'
+from database import get_db
+from db.models import User
+from routes.auth import get_current_user
+from services.affinity_service import AffinityService
 
 router = APIRouter()
-# ...rest of file
-router = APIRouter()
 
-@router.get("/affinity/companies")
-async def list_affinity_companies(
-    page_url: Optional[str] = None,
-    current_user: User = Depends(get_current_user)
+@router.get("/companies")
+async def search_companies(
+    query: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
-    """
-    Get list of companies from Affinity CRM.
-    """
+    """Search for companies in Affinity"""
     try:
-        companies = get_companies(page_url)
-        return companies
+        affinity = AffinityService()
+        companies = affinity.search_companies(query)
+        return {"companies": companies}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch companies: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to search companies: {str(e)}")
 
-@router.get("/affinity/companies/{company_id}")
-async def get_affinity_company(
+@router.get("/company/{company_id}")
+async def get_company(
     company_id: str,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
-    """
-    Get detailed information for a specific company from Affinity.
-    """
+    """Get detailed company information from Affinity"""
     try:
-        company_details = get_company_details(company_id)
-        return company_details
+        affinity = AffinityService()
+        company_data = affinity.get_company_data(company_id)
+        return company_data
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch company details: {str(e)}")
+        raise HTTPException(status_code=404, detail=f"Company not found: {str(e)}")

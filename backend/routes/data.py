@@ -1,11 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from typing import List, Optional
+from pydantic import BaseModel
 
-from database import get_db  # Remove 'backend.'
-from db.models import User, Memo  # Remove 'backend.'
+from database import get_db
+from db.models import User, Source
+from routes.auth import get_current_user
+from services.data_gathering_service import gather_and_store_company_data
 
 router = APIRouter()
-# ...rest of file
 
 class DataGatheringRequest(BaseModel):
     company_id: str
@@ -21,15 +24,13 @@ class DataGatheringResponse(BaseModel):
     errors: List[str]
     source_id: Optional[int] = None
 
-@router.post("/data/gather", response_model=DataGatheringResponse)
+@router.post("/gather", response_model=DataGatheringResponse)
 async def gather_company_data(
     request: DataGatheringRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Gather company data from Affinity and Google Drive and store in database.
-    """
+    """Gather company data from Affinity and Google Drive and store in database."""
     try:
         result = gather_and_store_company_data(
             user=current_user,
@@ -37,43 +38,49 @@ async def gather_company_data(
             company_id=request.company_id,
             company_name=request.company_name
         )
-        
         return DataGatheringResponse(**result)
-        
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to gather company data: {str(e)}")
 
-@router.get("/data/source/{source_id}")
+@router.get("/source/{source_id}")
 async def get_source_data(
     source_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Get stored company data by source ID.
-    """
-    try:
-        data = get_stored_company_data(db, source_id)
-        
-        if "error" in data:
-            raise HTTPException(status_code=404, detail=data["error"])
-            
-        return data
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve source data: {str(e)}")
+    """Get stored company data by source ID."""
+    source = db.query(Source).filter(
+        Source.id == source_id,
+        Source.user_id == current_user.id
+    ).first()
+    
+    if not source:
+        raise HTTPException(status_code=404, detail="Source not found")
+    
+    return {
+        "id": source.id,
+        "company_name": source.company_name,
+        "affinity_data": source.affinity_data,
+        "perplexity_data": source.perplexity_data,
+        "drive_data": source.drive_data,
+        "created_at": source.created_at
+    }
 
-@router.get("/data/sources")
+@router.get("/sources")
 async def list_sources(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    List all data sources for the current user.
-    """
-    try:
-        sources = list_user_sources(db, current_user.id)
-        return {"sources": sources}
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to list sources: {str(e)}")
+    """List all stored company data sources for current user."""
+    sources = db.query(Source).filter(
+        Source.user_id == current_user.id
+    ).order_by(Source.created_at.desc()).all()
+    
+    return [
+        {
+            "id": source.id,
+            "company_name": source.company_name,
+            "created_at": source.created_at
+        }
+        for source in sources
+    ]

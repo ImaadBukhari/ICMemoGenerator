@@ -2,12 +2,6 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-# Don't create tables on startup in production
-# from database import engine
-# from db import models
-# if os.getenv("ENVIRONMENT") != "production":
-#     models.Base.metadata.create_all(bind=engine)
-
 app = FastAPI(
     title="IC Memo Generator API",
     description="Investment Committee Memo Generation System",
@@ -34,7 +28,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include routers - only add working ones
+# Include routers
 try:
     from routes import auth
     app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
@@ -56,7 +50,6 @@ try:
 except Exception as e:
     print(f"⚠️  Affinity routes failed: {e}")
 
-# Skip memo routes for now if they import missing Memo model
 try:
     from routes import memo
     app.include_router(memo.router, prefix="/api/memo", tags=["memo"])
@@ -70,4 +63,18 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "environment": os.getenv("ENVIRONMENT", "development")}
+    """Health check endpoint"""
+    try:
+        from database import engine
+        with engine.connect() as conn:
+            conn.execute("SELECT 1")
+        return {
+            "status": "healthy", 
+            "environment": os.getenv("ENVIRONMENT", "development"),
+            "database": "Connected"
+        }
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "database_error": str(e)
+        }

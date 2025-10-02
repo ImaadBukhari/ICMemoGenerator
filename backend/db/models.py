@@ -1,48 +1,81 @@
-from sqlalchemy import Column, Integer, String, Text, TIMESTAMP, ForeignKey, JSON, DateTime
-from sqlalchemy.sql import func
-from sqlalchemy.orm import declarative_base, relationship
-from datetime import datetime, timezone
-
-Base = declarative_base()
+from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, Boolean, JSON
+from sqlalchemy.orm import relationship
+from datetime import datetime
+from database import Base
 
 class User(Base):
     __tablename__ = "users"
-
+    
     id = Column(Integer, primary_key=True, index=True)
-    email = Column(String, unique=True, nullable=False)
-    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
-
-    tokens = relationship("GoogleToken", back_populates="user")
+    email = Column(String, unique=True, nullable=False, index=True)
+    name = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    memos = relationship("Memo", back_populates="user")
+    google_tokens = relationship("GoogleToken", back_populates="user")
     sources = relationship("Source", back_populates="user")
     memo_requests = relationship("MemoRequest", back_populates="user")
 
-
 class GoogleToken(Base):
     __tablename__ = "google_tokens"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    access_token = Column(Text, nullable=False)
+    refresh_token = Column(Text, nullable=True)
+    expiry = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationship
+    user = relationship("User", back_populates="google_tokens")
+
+class Memo(Base):
+    __tablename__ = "memos"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
-    access_token = Column(Text)
-    refresh_token = Column(Text)
-    expiry = Column(TIMESTAMP(timezone=True))
-
-    user = relationship("User", back_populates="tokens")
-
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    company_name = Column(String, nullable=False)
+    title = Column(String, nullable=False)
+    content = Column(Text, nullable=False)
+    status = Column(String, default="draft")  # draft, in_review, approved
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationship
+    user = relationship("User", back_populates="memos")
 
 class Source(Base):
     __tablename__ = "sources"
-
+    
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
-    company_name = Column(String)
-    affinity_data = Column(JSON)
-    perplexity_data = Column(JSON)
-    gmail_data = Column(JSON)
-    drive_data = Column(JSON)
-    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
-
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    company_name = Column(String, nullable=False)
+    company_id = Column(String, nullable=True)
+    affinity_data = Column(JSON, nullable=True)
+    drive_data = Column(JSON, nullable=True)
+    perplexity_data = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationship
     user = relationship("User", back_populates="sources")
-    memo_requests = relationship("MemoRequest", back_populates="sources")
+
+class MemoRequest(Base):
+    __tablename__ = "memo_requests"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    company_name = Column(String, nullable=False)
+    sources_id = Column(Integer, ForeignKey("sources.id"), nullable=True)
+    status = Column(String, default="pending")  # pending, completed, failed, partial_success
+    drive_link = Column(String, nullable=True)
+    error_log = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    user = relationship("User", back_populates="memo_requests")
+    sections = relationship("MemoSection", back_populates="memo_request")
 
 class MemoSection(Base):
     __tablename__ = "memo_sections"
@@ -50,29 +83,12 @@ class MemoSection(Base):
     id = Column(Integer, primary_key=True, index=True)
     memo_request_id = Column(Integer, ForeignKey("memo_requests.id"), nullable=False)
     section_name = Column(String, nullable=False)
-    content = Column(Text)
-    data_sources = Column(JSON)  # List of Perplexity categories used
+    content = Column(Text, nullable=True)
+    data_sources = Column(JSON, nullable=True)  # ← Add this field
     status = Column(String, default="pending")  # pending, completed, failed
-    error_log = Column(Text)
-    # Fix: Use TIMESTAMP instead of datetime, and func.now() for defaults
-    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
-    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+    error_log = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    # Relationship back to memo request
+    # Relationship
     memo_request = relationship("MemoRequest", back_populates="sections")
-
-class MemoRequest(Base):
-    __tablename__ = "memo_requests"
-
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
-    company_name = Column(String)
-    drive_link = Column(Text)       # link to final Google Doc
-    sources_id = Column(Integer, ForeignKey("sources.id"))
-    status = Column(String)         # "pending", "success", "failed"
-    error_log = Column(Text)
-    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
-    sections = relationship("MemoSection", back_populates="memo_request")
-
-    user = relationship("User", back_populates="memo_requests")
-    sources = relationship("Source", back_populates="memo_requests")

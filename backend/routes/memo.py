@@ -1,13 +1,22 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
+from typing import List, Optional, Dict, Any
+from pydantic import BaseModel
 import os
 
-from database import get_db  # Remove 'backend.'
-from db.models import User, Memo  # Remove 'backend.'
-from services.memo_generator import MemoGenerator  # Remove 'backend.'
-from services.affinity_service import AffinityService  # Remove 'backend.'
-
-router = APIRouter()
+from database import get_db
+from db.models import User, MemoRequest, MemoSection
+from routes.auth import get_current_user
+from services.memo_generation_service import (
+    generate_comprehensive_memo, 
+    compile_final_memo
+)
+from services.data_gathering_service import get_stored_company_data
+from services.document_service import (
+    generate_word_document,
+    get_document_summary
+)
 
 router = APIRouter()
 
@@ -32,23 +41,19 @@ class MemoResponse(BaseModel):
     final_memo: Optional[str] = None
     error: Optional[str] = None
 
-@router.post("/memo/generate", response_model=MemoResponse)
+@router.post("/generate", response_model=MemoResponse)
 async def generate_memo(
     request: MemoGenerationRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Generate an IC memo from stored company data using section-by-section approach.
-    """
+    """Generate an IC memo from stored company data using section-by-section approach."""
     try:
-        # Get stored company data
         company_data = get_stored_company_data(db, request.source_id)
         
         if "error" in company_data:
             raise HTTPException(status_code=404, detail=company_data["error"])
         
-        # Create memo request
         memo_request = MemoRequest(
             user_id=current_user.id,
             company_name=company_data["company_name"],
@@ -60,17 +65,14 @@ async def generate_memo(
         db.refresh(memo_request)
         
         try:
-            # Generate memo sections
             generation_result = generate_comprehensive_memo(
                 company_data, 
                 db, 
                 memo_request.id
             )
             
-            # Compile final memo
             final_memo = compile_final_memo(db, memo_request.id)
             
-            # Update memo request status
             memo_request.status = generation_result["status"]
             db.commit()
             
@@ -82,7 +84,6 @@ async def generate_memo(
                 sections_failed=[SectionResult(**section) for section in generation_result["sections_failed"]],
                 final_memo=final_memo if generation_result["status"] in ["completed", "partial_success"] else None
             )
-            
         except Exception as e:
             memo_request.status = "failed"
             memo_request.error_log = str(e)
@@ -93,19 +94,16 @@ async def generate_memo(
                 status="failed",
                 error=str(e)
             )
-        
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate memo: {str(e)}")
 
-@router.get("/memo/{memo_id}/sections")
+@router.get("/{memo_id}/sections")
 async def get_memo_sections(
     memo_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Get all sections for a memo with their status.
-    """
+    """Get all sections for a memo with their status."""
     memo_request = db.query(MemoRequest).filter(
         MemoRequest.id == memo_id,
         MemoRequest.user_id == current_user.id
@@ -119,59 +117,24 @@ async def get_memo_sections(
     ).all()
     
     return {
-        "memo_id": memo_id,
-        "company_name": memo_request.company_name,
-        "overall_status": memo_request.status,
         "sections": [
             {
-                "id": section.id,
                 "section_name": section.section_name,
                 "status": section.status,
                 "content_length": len(section.content) if section.content else 0,
-                "data_sources": section.data_sources,
-                "error_log": section.error_log,
-                "created_at": section.created_at
+                "error": section.error_log
             }
             for section in sections
         ]
     }
 
-@router.get("/memo/{memo_id}/compile")
-async def get_compiled_memo(
-    memo_id: int,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """
-    Get the compiled final memo document.
-    """
-    memo_request = db.query(MemoRequest).filter(
-        MemoRequest.id == memo_id,
-        MemoRequest.user_id == current_user.id
-    ).first()
-    
-    if not memo_request:
-        raise HTTPException(status_code=404, detail="Memo request not found")
-    
-    final_memo = compile_final_memo(db, memo_id)
-    
-    return {
-        "memo_id": memo_id,
-        "company_name": memo_request.company_name,
-        "status": memo_request.status,
-        "final_memo": final_memo
-    }
-
-
-@router.get("/memo/{memo_id}")
+@router.get("/{memo_id}")
 async def get_memo_status(
     memo_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Get the status of a memo generation request.
-    """
+    """Get the status of a memo generation request."""
     memo_request = db.query(MemoRequest).filter(
         MemoRequest.id == memo_id,
         MemoRequest.user_id == current_user.id
@@ -189,29 +152,6 @@ async def get_memo_status(
         "created_at": memo_request.created_at
     }
 
-@router.get("/memo/list")
-async def list_user_memos(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """
-    List all memo requests for the current user.
-    """
-    memos = db.query(MemoRequest).filter(
-        MemoRequest.user_id == current_user.id
-    ).order_by(MemoRequest.created_at.desc()).all()
-    
-    return [
-        {
-            "id": memo.id,
-            "company_name": memo.company_name,
-            "status": memo.status,
-            "drive_link": memo.drive_link,
-            "created_at": memo.created_at
-        }
-        for memo in memos
-    ]
-
 class DocumentGenerationResponse(BaseModel):
     memo_request_id: int
     status: str
@@ -220,99 +160,26 @@ class DocumentGenerationResponse(BaseModel):
     document_summary: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
 
-@router.post("/memo/{memo_id}/generate-document", response_model=DocumentGenerationResponse)
-async def generate_memo_document(
+@router.post("/{memo_id}/generate-document", response_model=DocumentGenerationResponse)
+async def generate_document(
     memo_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Generate a Word document from completed memo sections.
-    """
+    """Generate Word document from memo sections."""
     try:
-        # Verify memo belongs to user
-        memo_request = db.query(MemoRequest).filter(
-            MemoRequest.id == memo_id,
-            MemoRequest.user_id == current_user.id
-        ).first()
-        
-        if not memo_request:
-            raise HTTPException(status_code=404, detail="Memo request not found")
-        
-        # Generate Word document
-        document_path = generate_word_document(db, memo_id)
-        
-        if document_path:
-            # Get document summary
-            doc_summary = get_document_summary(db, memo_id)
-            filename = os.path.basename(document_path)
-            
-            return DocumentGenerationResponse(
-                memo_request_id=memo_id,
-                status="success",
-                document_path=document_path,
-                filename=filename,
-                document_summary=doc_summary
-            )
-        else:
-            return DocumentGenerationResponse(
-                memo_request_id=memo_id,
-                status="failed",
-                error="Failed to generate Word document"
-            )
-            
+        result = generate_word_document(db, memo_id)
+        return DocumentGenerationResponse(**result)
     except Exception as e:
-        return DocumentGenerationResponse(
-            memo_request_id=memo_id,
-            status="failed",
-            error=str(e)
-        )
+        raise HTTPException(status_code=500, detail=f"Document generation failed: {str(e)}")
 
-@router.get("/memo/{memo_id}/download")
-async def download_memo_document(
+@router.get("/{memo_id}/download")
+async def download_document(
     memo_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Download the generated Word document for a memo.
-    """
-    try:
-        # Verify memo belongs to user
-        memo_request = db.query(MemoRequest).filter(
-            MemoRequest.id == memo_id,
-            MemoRequest.user_id == current_user.id
-        ).first()
-        
-        if not memo_request:
-            raise HTTPException(status_code=404, detail="Memo request not found")
-        
-        # Generate document if it doesn't exist
-        document_path = generate_word_document(db, memo_id)
-        
-        if not document_path or not os.path.exists(document_path):
-            raise HTTPException(status_code=404, detail="Document not found or generation failed")
-        
-        filename = os.path.basename(document_path)
-        
-        return FileResponse(
-            path=document_path,
-            filename=filename,
-            media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-        )
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to download document: {str(e)}")
-
-@router.get("/memo/{memo_id}/document-summary")
-async def get_memo_document_summary(
-    memo_id: int,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """
-    Get summary of document generation status and section completion.
-    """
+    """Download the generated Word document."""
     memo_request = db.query(MemoRequest).filter(
         MemoRequest.id == memo_id,
         MemoRequest.user_id == current_user.id
@@ -321,4 +188,15 @@ async def get_memo_document_summary(
     if not memo_request:
         raise HTTPException(status_code=404, detail="Memo request not found")
     
-    return get_document_summary(db, memo_id)
+    docs_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "generated_docs")
+    
+    for filename in os.listdir(docs_dir):
+        if filename.startswith(f"IC_Memo_{memo_request.company_name}"):
+            file_path = os.path.join(docs_dir, filename)
+            return FileResponse(
+                file_path,
+                media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                filename=filename
+            )
+    
+    raise HTTPException(status_code=404, detail="Document not found")
