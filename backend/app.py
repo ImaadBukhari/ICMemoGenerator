@@ -1,12 +1,15 @@
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from database import engine
+from db import models
 
-# Don't create tables on startup in production
-# from database import engine
-# from db import models
-# if os.getenv("ENVIRONMENT") != "production":
-#     models.Base.metadata.create_all(bind=engine)
+# Import routers
+from routes import auth, memo, data, affinity
+
+# Create database tables (only in development)
+if os.getenv("ENVIRONMENT") != "production":
+    models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="IC Memo Generator API",
@@ -34,35 +37,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include routers - only add working ones
-try:
-    from routes import auth
-    app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
-    print("✅ Auth routes loaded")
-except Exception as e:
-    print(f"⚠️  Auth routes failed: {e}")
-
-try:
-    from routes import data
-    app.include_router(data.router, prefix="/api/data", tags=["data"])
-    print("✅ Data routes loaded")
-except Exception as e:
-    print(f"⚠️  Data routes failed: {e}")
-
-try:
-    from routes import affinity
-    app.include_router(affinity.router, prefix="/api/affinity", tags=["affinity"])
-    print("✅ Affinity routes loaded")
-except Exception as e:
-    print(f"⚠️  Affinity routes failed: {e}")
-
-# Skip memo routes for now if they import missing Memo model
-try:
-    from routes import memo
-    app.include_router(memo.router, prefix="/api/memo", tags=["memo"])
-    print("✅ Memo routes loaded")
-except Exception as e:
-    print(f"⚠️  Memo routes failed: {e}")
+# Include routers
+app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
+app.include_router(memo.router, prefix="/api/memo", tags=["memo"])
+app.include_router(data.router, prefix="/api/data", tags=["data"])
+app.include_router(affinity.router, prefix="/api/affinity", tags=["affinity"])
 
 @app.get("/")
 async def root():
