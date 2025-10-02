@@ -1,13 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
+from typing import Optional, Dict, Any, List
 import os
 
-from database import get_db  # Remove 'backend.'
-from db.models import User, Memo  # Remove 'backend.'
-from services.memo_generator import MemoGenerator  # Remove 'backend.'
-from services.affinity_service import AffinityService  # Remove 'backend.'
-
-router = APIRouter()
+from backend.db.models import User, MemoRequest, MemoSection
+from backend.database import get_db
+from backend.auth import get_current_user
+from backend.services.data_gathering_service import get_stored_company_data
+from backend.services.memo_generation_service import generate_comprehensive_memo, compile_final_memo
+from backend.services.document_service import generate_word_document, get_document_summary
 
 router = APIRouter()
 

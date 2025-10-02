@@ -1,11 +1,18 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
+from typing import Optional, Dict, Any, List
 
-from database import get_db  # Remove 'backend.'
-from db.models import User, Memo  # Remove 'backend.'
+from backend.db.models import User
+from backend.database import get_db
+from backend.auth import get_current_user
+from backend.services.data_gathering_service import (
+    gather_and_store_company_data,
+    get_stored_company_data,
+    list_user_sources
+)
 
 router = APIRouter()
-# ...rest of file
 
 class DataGatheringRequest(BaseModel):
     company_id: str

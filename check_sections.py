@@ -6,8 +6,8 @@ from sqlalchemy.orm import Session
 project_root = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, project_root)
 
-from database import get_db
-from db.models import MemoRequest, MemoSection
+from backend.database import get_db
+from backend.db.models import MemoRequest, MemoSection
 
 def check_memo_sections():
     """Check what sections exist in the database"""
