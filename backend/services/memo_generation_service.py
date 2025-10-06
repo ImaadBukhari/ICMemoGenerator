@@ -6,6 +6,51 @@ from backend.db.models import MemoRequest, MemoSection
 from backend.services.gpt_service import generate_text
 from backend.services.rag_service import build_company_knowledge_base, retrieve_context_for_section
 
+def build_core_context(company_data, chunks, system_message):
+    """Create a unified factual summary from all RAG and CRM data"""
+    base_prompt = f"""
+You are preparing an internal context brief for a VC investment memo.
+Summarize all key factual information about the company concisely and accurately.
+
+Include:
+- Company name, founding year, HQ, and sector
+- Core product and value proposition
+- Market context or key trends
+- Funding history and investors
+- Key metrics (customers, ARR, employees)
+- Geographic footprint
+
+Do not include analysis, tone, or opinions — just facts. Keep under 400 words.
+"""
+    rag_text = "\n".join(c["text"] for c in chunks[:20])
+    full_prompt = f"{base_prompt}\n\n=== RAW DATA ===\n{rag_text}"
+    return generate_text(full_prompt, system_message, model="gpt-4-turbo-preview", temperature=0.2)
+
+
+def format_affinity_data(affinity_data: Dict[str, Any]) -> str:
+    """Format Affinity CRM data for prompts with Crunchbase attribution"""
+    if not affinity_data:
+        return "No CRM data available."
+    
+    formatted_sections = []
+    
+    # Add header with source attribution
+    formatted_sections.append("=== CRM DATA (Source: Crunchbase) ===\n")
+    
+    key_fields = [
+        'name', 'stage', 'industry', 'description', 'website',
+        'funding_stage', 'last_funding_amount', 'total_funding',
+        'valuation', 'employees', 'headquarters', 'founded_date'
+    ]
+    
+    for field in key_fields:
+        if field in affinity_data and affinity_data[field]:
+            formatted_sections.append(f"{field.replace('_', ' ').title()}: {affinity_data[field]}")
+    
+    formatted_sections.append("\n[All CRM data sourced from Crunchbase via Affinity CRM]")
+    
+    return "\n".join(formatted_sections) if len(formatted_sections) > 2 else "Limited CRM data available."
+
 # Load memo prompts
 def load_memo_prompts() -> Dict[str, Any]:
     """Load memo prompts from JSON file"""
@@ -31,6 +76,23 @@ def format_affinity_data(affinity_data: Dict[str, Any]) -> str:
     
     return "\n".join(formatted_sections) if formatted_sections else "Limited CRM data available."
 
+system_message = """
+You are a senior investment analyst at Wyld VC, an AI-first venture capital firm investing primarily in early-stage (Seed–Series B) technology companies in Silicon Valley and the Middle East.
+
+Your writing should reflect the tone and rigor of a top-tier venture capital investment committee.
+- Be analytical, structured, and data-driven.
+- Use concise, professional language that reads like a formal IC memo or equity research report.
+- Prioritize intellectual honesty and clear reasoning; avoid marketing language or unsubstantiated optimism.
+- Highlight both upside and risk with equal precision.
+- When making qualitative judgments, anchor them in concrete data (traction, TAM, growth rates, retention, competitive position).
+- Assume the reader is a sophisticated investor—avoid basic explanations and focus on insight and signal.
+
+When uncertain, state assumptions explicitly rather than speculating.
+Write in complete sentences, but keep paragraphs tight and efficient.
+Do not include filler text, self-references, or generic conclusions.
+"""
+
+
 def generate_memo_section_with_rag(
     section_key: str,
     prompt: str,
@@ -38,7 +100,8 @@ def generate_memo_section_with_rag(
     faiss_index,
     chunks: List[Dict[str, Any]],
     db: Session,
-    memo_request_id: int
+    memo_request_id: int,
+    core_context: Optional[str] = None
 ) -> Dict[str, Any]:
     """Generate a single memo section using RAG and GPT"""
     
@@ -55,52 +118,67 @@ def generate_memo_section_with_rag(
             top_k=8
         )
         
-        # Format Affinity data
+        # Format Affinity data with Crunchbase attribution - ADD THIS
         affinity_section = format_affinity_data(company_data.get("affinity_data", {}))
         
-        # Create enhanced prompt with RAG context
+        # Create enhanced prompt
         enhanced_prompt = f"""
 {prompt}
 
-=== CRM DATA ===
-{affinity_section}
+Use the following base company context for consistency:
+{core_context}
 
-=== RELEVANT RESEARCH & DATA (Retrieved via semantic search) ===
+Now, using only the additional context below, write the section:
 {rag_context['context']}
 
-IMPORTANT INSTRUCTIONS:
-1. Base your response ONLY on the data provided above
-2. When citing information, reference the citation numbers [1], [2], etc.
-3. Prioritize quantitative data, specific metrics, and statistics
-4. If specific information is not available, clearly state that rather than making assumptions
-5. Include specific numbers, percentages, growth rates, and financial figures when mentioned
-6. For assessments, justify ratings with specific data points from the research
+Do not restate facts already covered in the base context.
+End naturally without conclusions or transitions.
+When citing information, reference the citation numbers [1], [2], etc.
+All Affinity CRM data should be cited as "Source: Crunchbase"  # ADD THIS LINE
+Prioritize quantitative data, specific metrics, and statistics
+...
+"""
 
-SOURCES USED: {len(rag_context['sources'])} unique sources found
-"""
-        
-        # Generate content using GPT
-        system_message = f"""
-You are an expert venture capital analyst writing detailed investment memos. 
-Your analysis should be highly data-driven, using specific metrics and statistics.
-Always cite your sources using the citation numbers provided [1], [2], etc.
-Be transparent about data limitations and avoid speculation.
-"""
-        
+        if section_key in ["market_opportunity", "competitive_landscape", "financial"]:
+            # Analytical sections need lower temperature for precision
+            max_tokens = 2500
+            temperature = 0.3
+        elif section_key.startswith("assessment_"):
+            # Assessments need even more precision for ratings
+            max_tokens = 1500
+            temperature = 0.2
+        elif section_key == "executive_summary":
+            # Executive summary needs balance
+            max_tokens = 2000
+            temperature = 0.3
+        elif section_key == "company_snapshot":
+            max_tokens = 500
+            temperature = 0.2
+        else:
+            # Descriptive sections (people, company_snapshot, product, traction_validation, deal_considerations)
+            max_tokens = 2000
+            temperature = 0.4
+
+        # Generate content
         content = generate_text(
-            enhanced_prompt,
-            system_message,
+            enhanced_prompt,     
+            system_message,       
             model="gpt-4-turbo-preview",
-            max_tokens=2000,
-            temperature=0.2
+            max_tokens=max_tokens,
+            temperature=temperature
         )
+        
+        # Add Crunchbase to sources if Affinity data was used - ADD THIS
+        sources = rag_context['sources'].copy()
+        if company_data.get("affinity_data"):
+            sources.append("Crunchbase (via Affinity CRM)")
         
         # Store the section with source information
         memo_section = MemoSection(
             memo_request_id=memo_request_id,
             section_name=section_key,
             content=content,
-            data_sources=rag_context['sources'],  # Store actual sources used
+            data_sources=sources,  # Now includes Crunchbase
             status="completed"
         )
         
@@ -108,15 +186,15 @@ Be transparent about data limitations and avoid speculation.
         db.commit()
         db.refresh(memo_section)
         
-        print(f"✅ Section '{section_key}' generated successfully with {len(rag_context['sources'])} sources")
+        print(f"✅ Section '{section_key}' generated successfully with {len(sources)} sources")
         
         return {
             "status": "success",
             "section_name": section_key,
             "section_id": memo_section.id,
             "content_length": len(content),
-            "data_sources_used": rag_context['sources'],
-            "sources_count": len(rag_context['sources'])
+            "data_sources_used": sources,
+            "sources_count": len(sources)
         }
         
     except Exception as e:
@@ -205,19 +283,22 @@ def generate_comprehensive_memo(
         ("assessment_traction_validation", "traction_validation"),
         ("assessment_deal_considerations", "deal_considerations")
     ]
+
+    core_context = build_core_context(company_data, chunks, system_message)
     
     # Process main sections
     for section in main_sections:
         if section in prompts:
             result = generate_memo_section_with_rag(
-                section,
-                prompts[section],
-                company_data,
-                faiss_index,
-                chunks,
-                db,
-                memo_request_id
-            )
+            section,
+            prompts[section],
+            company_data,
+            faiss_index,
+            chunks,
+            db,
+            memo_request_id,
+            core_context=core_context
+        )
             
             if result["status"] == "success":
                 results["sections_completed"].append(result)
