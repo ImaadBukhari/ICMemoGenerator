@@ -115,3 +115,45 @@
       font-size: 0.9rem;
     }
   }
+
+  /* Add these new styles */
+
+.form-textarea {
+  width: 100%;
+  padding: 0.875rem 1rem;
+  font-size: 0.95rem;
+  border: 2px solid rgba(107, 203, 193, 0.2);
+  border-radius: 8px;
+  background: #ffffff;
+  color: #2c3e50;
+  transition: all 0.3s ease;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  resize: vertical;
+  min-height: 80px;
+}
+
+.form-textarea:focus {
+  outline: none;
+  border-color: #6bcbc1;
+  box-shadow: 0 0 0 3px rgba(107, 203, 193, 0.1);
+}
+
+.form-textarea:disabled {
+  background: #f8f9fa;
+  cursor: not-allowed;
+}
+
+.optional-label {
+  font-size: 0.75rem;
+  color: #95a5a6;
+  font-weight: 400;
+  font-style: italic;
+}
+
+.field-hint {
+  font-size: 0.8rem;
+  color: #7f8c8d;
+  margin-top: 0.5rem;
+  line-height: 1.4;
+}

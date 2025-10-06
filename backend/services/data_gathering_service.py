@@ -95,15 +95,15 @@ def gather_drive_data(user: User, db: Session, company_name: str) -> Dict[str, A
             "error": str(e)
         }
 
-def gather_perplexity_data(company_name: str) -> Dict[str, Any]:
+def gather_perplexity_data(company_name: str, description: str = None) -> Dict[str, Any]:
     """
     Gather comprehensive company research data including stats from Perplexity.
     """
     try:
-        # Use enhanced comprehensive search with stats
+        # Use enhanced comprehensive search with stats AND description
         from backend.services.perplexity_service import search_company_comprehensive_with_stats
         
-        perplexity_data = search_company_comprehensive_with_stats(company_name)
+        perplexity_data = search_company_comprehensive_with_stats(company_name, description)  # Add description
         return {
             "success": True,
             "data": perplexity_data,
@@ -111,7 +111,6 @@ def gather_perplexity_data(company_name: str) -> Dict[str, Any]:
         }
     except Exception as e:
         print(f"Perplexity error: {str(e)}")
-        # Return a mock structure so the system continues to work
         return {
             "success": False,
             "data": {
@@ -129,20 +128,13 @@ def gather_and_store_company_data(
     user: User,
     db: Session,
     company_id: str,
-    company_name: str
+    company_name: str,
+    description: str = None  # Add description parameter
 ) -> Dict[str, Any]:
     """
-    Main function to gather all company data and store it in the database.
-    
-    Args:
-        user: The user making the request
-        db: Database session
-        company_id: Affinity company ID
-        company_name: Company name for searching
-    
-    Returns:
-        Dictionary containing the results and source record ID
+    Gather company data from multiple sources and store in database.
     """
+    errors = []
     
     results = {
         "company_name": company_name,
@@ -168,9 +160,11 @@ def gather_and_store_company_data(
     if not drive_result["success"]:
         results["errors"].append(f"Google Drive error: {drive_result['error']}")
     
-    # 3. Gather comprehensive Perplexity data
+    # 3. Gather comprehensive Perplexity data with description
     print(f"Gathering comprehensive Perplexity data for company: {company_name}")
-    perplexity_result = gather_perplexity_data(company_name)
+    if description:
+        print(f"  Using description: {description}")
+    perplexity_result = gather_perplexity_data(company_name, description)  # Pass description
     results["perplexity_success"] = perplexity_result["success"]
     if not perplexity_result["success"]:
         results["errors"].append(f"Perplexity error: {perplexity_result['error']}")
@@ -180,6 +174,7 @@ def gather_and_store_company_data(
         source = Source(
             user_id=user.id,
             company_name=company_name,
+            company_description=description,  # Store description in DB
             affinity_data=affinity_result["data"] if affinity_result["success"] else None,
             perplexity_data=perplexity_result["data"] if perplexity_result["success"] else None,
             drive_data={
@@ -241,3 +236,21 @@ def list_user_sources(db: Session, user_id: int) -> List[Dict[str, Any]]:
         }
         for source in sources
     ]
+
+# ... existing code ...
+
+def get_stored_company_data(db: Session, source_id: int) -> Dict[str, Any]:
+    """Retrieve stored company data for memo generation"""
+    source = db.query(Source).filter(Source.id == source_id).first()
+    
+    if not source:
+        return {"error": "Source not found"}
+    
+    return {
+        "source_id": source_id,  # ADD THIS
+        "company_name": source.company_name,
+        "affinity_data": source.affinity_data,
+        "perplexity_data": source.perplexity_data,
+        "gmail_data": source.gmail_data,
+        "drive_data": source.drive_data
+    }

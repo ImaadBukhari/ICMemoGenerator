@@ -31,18 +31,21 @@ class GoogleToken(Base):
 
 class Source(Base):
     __tablename__ = "sources"
-
+    
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
     company_name = Column(String)
-    affinity_data = Column(JSON)
-    perplexity_data = Column(JSON)
-    gmail_data = Column(JSON)
-    drive_data = Column(JSON)
+    company_description = Column(String, nullable=True)  # NEW - for description
+    affinity_data = Column(JSON, nullable=True)
+    perplexity_data = Column(JSON, nullable=True)
+    gmail_data = Column(JSON, nullable=True)
+    drive_data = Column(JSON, nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
-
+    
+    # ALL THREE RELATIONSHIPS
     user = relationship("User", back_populates="sources")
     memo_requests = relationship("MemoRequest", back_populates="sources")
+    embeddings = relationship("DocumentEmbedding", back_populates="source", cascade="all, delete-orphan")
 
 class MemoSection(Base):
     __tablename__ = "memo_sections"
@@ -76,3 +79,23 @@ class MemoRequest(Base):
 
     user = relationship("User", back_populates="memo_requests")
     sources = relationship("Source", back_populates="memo_requests")
+
+
+# Add this to your existing models
+
+class DocumentEmbedding(Base):
+    __tablename__ = "document_embeddings"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    source_id = Column(Integer, ForeignKey("sources.id"), nullable=False)
+    chunk_text = Column(Text, nullable=False)
+    chunk_index = Column(Integer, nullable=False)
+    category = Column(String, nullable=False)
+    chunk_type = Column(String, nullable=False)
+    embedding = Column(JSON, nullable=False)
+    sources = Column(JSON)
+    chunk_metadata = Column(JSON)  # CHANGED FROM 'metadata' to 'chunk_metadata'
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    
+    # Relationship
+    source = relationship("Source", back_populates="embeddings")

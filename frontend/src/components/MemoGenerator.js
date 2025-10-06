@@ -14,7 +14,7 @@ function MemoGenerator() {
   
   const pollingIntervalRef = useRef(null);
 
-  const handleGenerate = async (companyName, affinityId) => {
+  const handleGenerate = async (companyName, affinityId, description) => {  // Add description parameter
     setStage('loading');
     setCurrentSection('Gathering company data...');
     setProgress(0);
@@ -26,7 +26,8 @@ function MemoGenerator() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           company_name: companyName,
-          company_id: affinityId
+          company_id: affinityId,
+          description: description  // Add description
         })
       });
 

@@ -600,13 +600,50 @@ def add_section_to_document(doc: Document, section_name: str, content: str, sect
                 bullet_para = doc.add_paragraph(style='List Bullet')
                 add_formatted_text_to_paragraph(bullet_para, item, BODY_FONT, BODY_SIZE)
 
-def generate_word_document(db: Session, memo_request_id: int) -> Optional[str]:
-    """
-    Generate a Word document from memo sections stored in the database
+def add_sources_section(doc: Document, sections: List):
+    """Add a sources/references section at the end of the document"""
     
-    Returns:
-        Path to the generated Word document, or None if generation fails
-    """
+    # Collect all unique sources from all sections
+    all_sources = set()
+    
+    for section in sections:
+        if section.data_sources and isinstance(section.data_sources, list):
+            all_sources.update(section.data_sources)
+    
+    if not all_sources:
+        return
+    
+    # Add page break before sources
+    doc.add_page_break()
+    
+    # Add "Sources" heading
+    sources_heading = doc.add_heading('Sources & References', level=1)
+    sources_heading.style = 'Heading 1'
+    
+    # Add description
+    desc = doc.add_paragraph()
+    desc.add_run("The following sources were used in the preparation of this investment memo:").italic = True
+    desc.paragraph_format.space_after = Pt(12)
+    
+    # Sort sources alphabetically and add them
+    sorted_sources = sorted(list(all_sources))
+    
+    for i, source in enumerate(sorted_sources, 1):
+        source_para = doc.add_paragraph(style='List Number')
+        source_para.text = source
+        
+        # Format the source text
+        for run in source_para.runs:
+            run.font.name = 'Bangla Sangam MN'
+            run.font.size = Pt(10)
+        
+        source_para.paragraph_format.space_after = Pt(6)
+        source_para.paragraph_format.left_indent = Inches(0.25)
+
+# Update the generate_word_document function to call this
+
+def generate_word_document(db: Session, memo_request_id: int) -> Optional[str]:
+    """Generate a formatted Word document from memo sections with sources"""
     
     try:
         print(f"Starting document generation for memo {memo_request_id}")
@@ -614,9 +651,13 @@ def generate_word_document(db: Session, memo_request_id: int) -> Optional[str]:
         # Check if python-docx is available
         try:
             from docx import Document
+            from docx.shared import Pt, Inches, RGBColor
+            from docx.enum.text import WD_ALIGN_PARAGRAPH
+            from docx.oxml import OxmlElement
+            from docx.oxml.ns import qn
             print("✅ python-docx is available")
         except ImportError as e:
-            print(f"❌ python-docx not available: {e}")
+            print(f"❌ python-docx import error: {str(e)}")
             return None
         
         # Get memo request
@@ -630,7 +671,7 @@ def generate_word_document(db: Session, memo_request_id: int) -> Optional[str]:
         
         print(f"✅ Found memo request for {memo_request.company_name}")
         
-        # Get completed sections
+        # Get all completed sections
         sections = db.query(MemoSection).filter(
             MemoSection.memo_request_id == memo_request_id,
             MemoSection.status == "completed"
@@ -658,6 +699,11 @@ def generate_word_document(db: Session, memo_request_id: int) -> Optional[str]:
         generation_date = datetime.now().strftime("%B %d, %Y")
         info_para = doc.add_paragraph(f"Generated: {generation_date}")
         info_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        for run in info_para.runs:
+            run.font.name = 'Bangla Sangam MN'
+            run.font.size = Pt(10)
+            run.font.color.rgb = RGBColor(127, 140, 141)
+        
         doc.add_paragraph()  # Spacing
         
         print("✅ Added title and header")
@@ -704,35 +750,34 @@ def generate_word_document(db: Session, memo_request_id: int) -> Optional[str]:
         for section_key, section_title in main_section_order.items():
             if section_key in main_sections_dict:
                 print(f"Adding section with formatting: {section_title}")
-                add_section_to_document(doc, section_key, main_sections_dict[section_key].content, main_section_order)
-                doc.add_page_break()
+                add_section_to_document(doc, section_key, main_sections_dict[section_key].content, 
+                                      {section_key: section_title})
+                doc.add_paragraph()  # Spacing between sections
         
-        # Generate filename and save
-        safe_company_name = "".join(c for c in memo_request.company_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
-        filename = f"IC_Memo_{safe_company_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
+        # ADD SOURCES SECTION HERE
+        print("Adding sources section...")
+        add_sources_section(doc, sections)
         
-        # Create documents directory if it doesn't exist
+        # Ensure documents directory exists
         docs_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'generated_docs')
         print(f"Documents directory: {docs_dir}")
         
-        try:
-            os.makedirs(docs_dir, exist_ok=True)
-            print("✅ Documents directory created/verified")
-        except Exception as e:
-            print(f"❌ Failed to create documents directory: {e}")
-            return None
+        os.makedirs(docs_dir, exist_ok=True)
+        print("✅ Documents directory created/verified")
         
+        # Generate filename with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        safe_company_name = memo_request.company_name.replace(' ', '_').replace('/', '_')
+        filename = f"IC_Memo_{safe_company_name}_{timestamp}.docx"
         file_path = os.path.join(docs_dir, filename)
+        
         print(f"Saving document to: {file_path}")
         
-        try:
-            doc.save(file_path)
-            print(f"✅ Word document saved successfully with enhanced formatting")
-        except Exception as e:
-            print(f"❌ Failed to save document: {e}")
-            return None
+        # Save the document
+        doc.save(file_path)
+        print("✅ Word document saved successfully with enhanced formatting")
         
-        # Verify file was created
+        # Verify file exists
         if os.path.exists(file_path):
             file_size = os.path.getsize(file_path)
             print(f"✅ Document file exists, size: {file_size} bytes")
@@ -742,9 +787,9 @@ def generate_word_document(db: Session, memo_request_id: int) -> Optional[str]:
             return None
         
     except Exception as e:
-        print(f"❌ Failed to generate Word document: {str(e)}")
+        print(f"❌ Error generating Word document: {str(e)}")
         import traceback
-        print(f"Traceback: {traceback.format_exc()}")
+        traceback.print_exc()
         return None
 
 def get_document_summary(db: Session, memo_request_id: int) -> Dict[str, Any]:

@@ -4,6 +4,7 @@ import './InputForm.css';
 function InputForm({ onGenerate }) {
   const [companyName, setCompanyName] = useState('');
   const [affinityId, setAffinityId] = useState('');
+  const [description, setDescription] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
 
   const handleSubmit = async (e) => {
@@ -14,7 +15,7 @@ function InputForm({ onGenerate }) {
     }
 
     setIsGenerating(true);
-    await onGenerate(companyName, affinityId);
+    await onGenerate(companyName, affinityId, description.trim());
     setIsGenerating(false);
   };
 
@@ -33,11 +34,29 @@ function InputForm({ onGenerate }) {
             type="text"
             value={companyName}
             onChange={(e) => setCompanyName(e.target.value)}
-            placeholder="Enter company name"
+            placeholder="e.g., Nash"
             className="form-input"
             disabled={isGenerating}
             required
           />
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="description" className="form-label">
+            Company Description <span className="optional-label">(Optional but recommended)</span>
+          </label>
+          <textarea
+            id="description"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Brief description to help identify the company (e.g., 'AI-powered logistics startup based in San Francisco' or 'B2B SaaS platform for supply chain management')"
+            className="form-textarea"
+            disabled={isGenerating}
+            rows="3"
+          />
+          <p className="field-hint">
+            This helps us find the right company, especially if the name is common or ambiguous.
+          </p>
         </div>
 
         <div className="form-group">

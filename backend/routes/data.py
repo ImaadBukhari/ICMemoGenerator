@@ -17,6 +17,7 @@ router = APIRouter()
 class DataGatheringRequest(BaseModel):
     company_id: str
     company_name: str
+    description: Optional[str] = None
 
 class DataGatheringResponse(BaseModel):
     company_name: str
@@ -42,7 +43,8 @@ async def gather_company_data(
             user=current_user,
             db=db,
             company_id=request.company_id,
-            company_name=request.company_name
+            company_name=request.company_name,
+            description=request.description  # Add this line
         )
         
         return DataGatheringResponse(**result)

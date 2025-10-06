@@ -1,32 +1,37 @@
+import sys
+import os
+from pathlib import Path
+
+# Add backend directory (parent of migrations) to Python path
+backend_dir = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(backend_dir))
+
 from logging.config import fileConfig
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 from alembic import context
-import os
-import sys
 from dotenv import load_dotenv
 
-# Load .env file
-load_dotenv()
+# Load environment variables
+env_path = backend_dir / '.env'
+load_dotenv(dotenv_path=env_path)
 
-# Add the parent directory to the path so we can import backend
-parent_dir = os.path.dirname(os.path.dirname(__file__))
-sys.path.insert(0, parent_dir)
-
-# Import your Base and models
-from backend.db.models import Base
+# Import your models
+from db.models import Base
 
 # this is the Alembic Config object
 config = context.config
 
-# Override the sqlalchemy.url from .env
-config.set_main_option('sqlalchemy.url', os.getenv('DATABASE_URL'))
+# Override sqlalchemy.url with the one from .env
+database_url = os.getenv("DATABASE_URL")
+if database_url:
+    config.set_main_option("sqlalchemy.url", database_url)
 
-# Interpret the config file for Python logging
+# Interpret the config file for Python logging.
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Set target metadata
+# Set target metadata for autogenerate
 target_metadata = Base.metadata
 
 def run_migrations_offline() -> None:
