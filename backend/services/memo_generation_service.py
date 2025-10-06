@@ -75,13 +75,14 @@ IMPORTANT INSTRUCTIONS:
 4. If specific information is not available, clearly state that rather than making assumptions
 5. Include specific numbers, percentages, growth rates, and financial figures when mentioned
 6. For assessments, justify ratings with specific data points from the research
+7. Avoid the use of 'we', focus on the facts and use a less active voice. When absolutely necessary, use 'the Firm' or 'Wyld VC' 
 
 SOURCES USED: {len(rag_context['sources'])} unique sources found
 """
         
         # Generate content using GPT
         system_message = f"""
-You are an expert venture capital analyst writing detailed investment memos. 
+You are an expert venture capital analyst writing detailed investment memos for Wyld VC. 
 Your analysis should be highly data-driven, using specific metrics and statistics.
 Always cite your sources using the citation numbers provided [1], [2], etc.
 Be transparent about data limitations and avoid speculation.
