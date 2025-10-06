@@ -1,0 +1,14 @@
+.memo-generator {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    min-height: calc(100vh - 100px);
+  }
+  
+  .content-container {
+    width: 100%;
+    max-width: 600px;
+    margin: 0 auto;
+  }

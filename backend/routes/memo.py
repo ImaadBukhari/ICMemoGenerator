@@ -1,11 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 import os
 
 from backend.db.models import User, MemoRequest, MemoSection
-from backend.database import get_db
+from backend.database import get_db, SessionLocal  # ADD SessionLocal import
 from backend.auth import get_current_user
 from backend.services.data_gathering_service import get_stored_company_data
 from backend.services.memo_generation_service import generate_comprehensive_memo, compile_final_memo
@@ -28,23 +29,43 @@ class SectionResult(BaseModel):
 class MemoResponse(BaseModel):
     memo_request_id: int
     status: str
-    generation_summary: Optional[Dict[str, Any]] = None
-    sections_completed: Optional[List[SectionResult]] = None
-    sections_failed: Optional[List[SectionResult]] = None
-    final_memo: Optional[str] = None
-    error: Optional[str] = None
+    message: Optional[str] = None
 
-@router.post("/memo/generate", response_model=MemoResponse)
+def generate_memo_background(company_data: Dict, memo_request_id: int):
+    """Background task to generate memo sections"""
+    # CREATE A NEW DATABASE SESSION FOR THIS BACKGROUND TASK
+    db = SessionLocal()
+    try:
+        generation_result = generate_comprehensive_memo(
+            company_data, 
+            db, 
+            memo_request_id
+        )
+        
+        # Update memo request status
+        memo_request = db.query(MemoRequest).filter(MemoRequest.id == memo_request_id).first()
+        if memo_request:
+            memo_request.status = generation_result["status"]
+            db.commit()
+    except Exception as e:
+        print(f"Background generation error: {str(e)}")
+        memo_request = db.query(MemoRequest).filter(MemoRequest.id == memo_request_id).first()
+        if memo_request:
+            memo_request.status = "failed"
+            memo_request.error_log = str(e)
+            db.commit()
+    finally:
+        db.close()  # ALWAYS CLOSE THE SESSION
+
+@router.post("/memo/generate")
 async def generate_memo(
     request: MemoGenerationRequest,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Generate an IC memo from stored company data using section-by-section approach.
-    """
+    """Start memo generation in background and return immediately"""
     try:
-        # Get stored company data
         company_data = get_stored_company_data(db, request.source_id)
         
         if "error" in company_data:
@@ -55,49 +76,31 @@ async def generate_memo(
             user_id=current_user.id,
             company_name=company_data["company_name"],
             sources_id=request.source_id,
-            status="pending"
+            status="in_progress"
         )
         db.add(memo_request)
         db.commit()
         db.refresh(memo_request)
         
-        try:
-            # Generate memo sections
-            generation_result = generate_comprehensive_memo(
-                company_data, 
-                db, 
-                memo_request.id
-            )
-            
-            # Compile final memo
-            final_memo = compile_final_memo(db, memo_request.id)
-            
-            # Update memo request status
-            memo_request.status = generation_result["status"]
-            db.commit()
-            
-            return MemoResponse(
-                memo_request_id=memo_request.id,
-                status=generation_result["status"],
-                generation_summary=generation_result["generation_summary"],
-                sections_completed=[SectionResult(**section) for section in generation_result["sections_completed"]],
-                sections_failed=[SectionResult(**section) for section in generation_result["sections_failed"]],
-                final_memo=final_memo if generation_result["status"] in ["completed", "partial_success"] else None
-            )
-            
-        except Exception as e:
-            memo_request.status = "failed"
-            memo_request.error_log = str(e)
-            db.commit()
-            
-            return MemoResponse(
-                memo_request_id=memo_request.id,
-                status="failed",
-                error=str(e)
-            )
+        # Start generation in background - DON'T PASS db SESSION
+        background_tasks.add_task(
+            generate_memo_background,
+            company_data,
+            memo_request.id  # Only pass the ID, not the session
+        )
+        
+        # Return immediately with memo_request_id
+        return {
+            "memo_request_id": memo_request.id,
+            "status": "in_progress",
+            "message": "Memo generation started"
+        }
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to generate memo: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to start memo generation: {str(e)}")
+
+# ... keep all other routes exactly the same ...
+# ... rest of the routes stay the same ...
 
 @router.get("/memo/{memo_id}/sections")
 async def get_memo_sections(

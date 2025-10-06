@@ -1,27 +1,31 @@
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+
 from backend.database import get_db
 from backend.db.models import User
-from typing import Optional
 
-security = HTTPBearer(auto_error=False)  # Make it optional
+router = APIRouter()
 
-def get_current_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
-    db: Session = Depends(get_db)
-) -> User:
-    """
-    Get current authenticated user.
-    For now, this is a simple implementation for testing.
-    """
-    # For demo purposes, we'll just get the first user or create one
+def get_current_user(db: Session = Depends(get_db)):
+    """Dependency to get current authenticated user"""
+    # For development, create or get a test user
     user = db.query(User).first()
     if not user:
-        # Create a demo user if none exists
-        user = User(email="demo@example.com")
+        user = User(
+            email="test@example.com"
+        )
         db.add(user)
         db.commit()
         db.refresh(user)
-    
     return user
+
+@router.get("/auth/status")
+async def auth_status(current_user: User = Depends(get_current_user)):
+    """Check authentication status"""
+    return {
+        "authenticated": True,
+        "user": {
+            "id": current_user.id,
+            "email": current_user.email
+        }
+    }

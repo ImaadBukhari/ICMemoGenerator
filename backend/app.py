@@ -3,15 +3,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 import os
+from pathlib import Path
 from dotenv import load_dotenv
+
+# Load .env from backend directory
+current_dir = Path(__file__).parent
+env_path = current_dir / '.env'
+load_dotenv(dotenv_path=env_path)
 
 from backend.db.models import Base
 from backend.routes.auth import router as auth_router
 from backend.routes.memo import router as memo_router
 from backend.routes.affinity import router as affinity_router
 from backend.routes.data import router as data_router
-
-load_dotenv()
 
 # Database setup
 DATABASE_URL = os.getenv("DATABASE_URL")

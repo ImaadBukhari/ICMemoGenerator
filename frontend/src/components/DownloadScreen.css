@@ -1,0 +1,195 @@
+.download-screen {
+    text-align: center;
+    animation: fadeIn 0.5s ease-in;
+    max-width: 500px;
+    margin: 0 auto;
+  }
+  
+  .success-icon {
+    margin: 0 auto 2rem;
+    width: 100px;
+    height: 100px;
+  }
+  
+  .checkmark {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    display: block;
+    stroke-width: 2;
+    stroke: #6bcbc1;
+    stroke-miterlimit: 10;
+    box-shadow: inset 0px 0px 0px #6bcbc1;
+    animation: fill 0.4s ease-in-out 0.4s forwards, scale 0.3s ease-in-out 0.9s both;
+  }
+  
+  .checkmark-circle {
+    stroke-dasharray: 166;
+    stroke-dashoffset: 166;
+    stroke-width: 2;
+    stroke-miterlimit: 10;
+    stroke: #6bcbc1;
+    fill: none;
+    animation: stroke 0.6s cubic-bezier(0.65, 0, 0.45, 1) forwards;
+  }
+  
+  .checkmark-check {
+    transform-origin: 50% 50%;
+    stroke-dasharray: 48;
+    stroke-dashoffset: 48;
+    animation: stroke 0.3s cubic-bezier(0.65, 0, 0.45, 1) 0.8s forwards;
+  }
+  
+  @keyframes stroke {
+    100% {
+      stroke-dashoffset: 0;
+    }
+  }
+  
+  @keyframes scale {
+    0%, 100% {
+      transform: none;
+    }
+    50% {
+      transform: scale3d(1.1, 1.1, 1);
+    }
+  }
+  
+  @keyframes fill {
+    100% {
+      box-shadow: inset 0px 0px 0px 30px rgba(107, 203, 193, 0.1);
+    }
+  }
+  
+  .success-title {
+    font-size: 1.8rem;
+    font-weight: 300;
+    color: #2c3e50;
+    margin-bottom: 2rem;
+    letter-spacing: 0.5px;
+  }
+  
+  .memo-info {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin-bottom: 3rem;
+    padding: 2rem;
+    background: rgba(107, 203, 193, 0.05);
+    border-radius: 8px;
+  }
+  
+  .info-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  
+  .info-label {
+    font-size: 0.9rem;
+    color: #6bcbc1;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  
+  .info-value {
+    font-size: 1rem;
+    color: #2c3e50;
+    font-weight: 400;
+  }
+  
+  .action-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  
+  .download-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.8rem;
+    padding: 1.2rem 2rem;
+    font-size: 1rem;
+    font-weight: 500;
+    color: #ffffff;
+    background: linear-gradient(135deg, #6bcbc1 0%, #5ab9af 100%);
+    border: none;
+    border-radius: 50px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  
+  .download-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px rgba(107, 203, 193, 0.3);
+  }
+  
+  .download-button:active {
+    transform: translateY(0);
+  }
+  
+  .new-memo-button {
+    padding: 1rem 2rem;
+    font-size: 0.95rem;
+    font-weight: 400;
+    color: #6bcbc1;
+    background: transparent;
+    border: 2px solid rgba(107, 203, 193, 0.3);
+    border-radius: 50px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+  }
+  
+  .new-memo-button:hover {
+    background: rgba(107, 203, 193, 0.05);
+    border-color: #6bcbc1;
+  }
+  
+  @media (max-width: 768px) {
+    .success-title {
+      font-size: 1.4rem;
+    }
+    
+    .success-icon {
+      width: 80px;
+      height: 80px;
+    }
+    
+    .checkmark {
+      width: 80px;
+      height: 80px;
+    }
+  }
+
+  /* Add to existing file */
+.error-message {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: rgba(231, 76, 60, 0.1);
+  border: 1px solid rgba(231, 76, 60, 0.3);
+  border-radius: 8px;
+  margin-bottom: 2rem;
+}
+
+.error-icon {
+  font-size: 1.2rem;
+}
+
+.error-text {
+  color: #e74c3c;
+  font-size: 0.9rem;
+  font-weight: 400;
+}
+
+.download-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none !important;
+}

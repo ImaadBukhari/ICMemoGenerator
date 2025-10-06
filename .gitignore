@@ -6,5 +6,18 @@ node_modules/
 *.db
 /backend/schemas/memo_prompts_private.json
 .env
+frontend/.env.production
 
 *.docx
+
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+node_modules/
+/.pnp
+.pnp.js
+
+/coverage
+/build

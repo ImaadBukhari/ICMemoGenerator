@@ -14,9 +14,7 @@ async def list_affinity_companies(
     page_url: Optional[str] = None,
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Get list of companies from Affinity CRM.
-    """
+    """Get list of companies from Affinity CRM."""
     try:
         companies = get_companies(page_url)
         return companies
@@ -28,9 +26,7 @@ async def get_affinity_company(
     company_id: str,
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Get detailed information for a specific company from Affinity.
-    """
+    """Get detailed information for a specific company from Affinity."""
     try:
         company_details = get_company_details(company_id)
         return company_details
