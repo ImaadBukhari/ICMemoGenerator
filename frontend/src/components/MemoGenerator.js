@@ -4,6 +4,7 @@ import LoadingScreen from './LoadingScreen';
 import DownloadScreen from './DownloadScreen';
 import './MemoGenerator.css';
 
+// Main component managing the memo generation process
 function MemoGenerator() {
   const [stage, setStage] = useState('input');
   const [memoData, setMemoData] = useState(null);
@@ -20,6 +21,7 @@ function MemoGenerator() {
     setProgress(0);
     setCompletedSections(0);
 
+    // Step 1: Gather company data
     try {
       const gatherResponse = await fetch('http://localhost:8000/api/data/gather', {
         method: 'POST',
@@ -38,7 +40,7 @@ function MemoGenerator() {
       const gatherData = await gatherResponse.json();
       setCurrentSection('Starting memo generation...');
       
-      // Start memo generation (returns immediately now)
+      // Start memo generation 
       const memoResponse = await fetch('http://localhost:8000/api/memo/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -62,6 +64,7 @@ function MemoGenerator() {
     }
   };
 
+  //  Polling function to check memo generation status
   const startPolling = (memoId, companyName) => {
     pollingIntervalRef.current = setInterval(async () => {
       try {
@@ -125,6 +128,7 @@ function MemoGenerator() {
     }, 1000);
   };
 
+  //  Format section keys to user-friendly names
   const formatSectionName = (sectionKey) => {
     const sectionNames = {
       'executive_summary': 'Executive Summary',

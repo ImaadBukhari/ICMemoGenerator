@@ -4,6 +4,7 @@ import Header from './components/Header';
 import MemoGenerator from './components/MemoGenerator';
 import './App.css';
 
+// Main application component with routing
 function App() {
   return (
     <Router>

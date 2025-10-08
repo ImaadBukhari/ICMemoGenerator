@@ -10,6 +10,8 @@ from backend.database import get_db
 from backend.db.models import User, GoogleToken
 from backend.auth import get_current_user
 
+# This file handles Google OAuth2 authentication and token management
+
 router = APIRouter()
 
 # Google OAuth2 configuration

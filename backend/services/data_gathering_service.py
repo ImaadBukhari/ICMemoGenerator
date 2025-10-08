@@ -103,7 +103,7 @@ def gather_perplexity_data(company_name: str, description: str = None) -> Dict[s
         # Use enhanced comprehensive search with stats AND description
         from backend.services.perplexity_service import search_company_comprehensive_with_stats
         
-        perplexity_data = search_company_comprehensive_with_stats(company_name, description)  # Add description
+        perplexity_data = search_company_comprehensive_with_stats(company_name, description)  
         return {
             "success": True,
             "data": perplexity_data,
@@ -129,7 +129,7 @@ def gather_and_store_company_data(
     db: Session,
     company_id: str,
     company_name: str,
-    description: str = None  # Add description parameter
+    description: str = None  
 ) -> Dict[str, Any]:
     """
     Gather company data from multiple sources and store in database.
@@ -237,7 +237,6 @@ def list_user_sources(db: Session, user_id: int) -> List[Dict[str, Any]]:
         for source in sources
     ]
 
-# ... existing code ...
 
 def get_stored_company_data(db: Session, source_id: int) -> Dict[str, Any]:
     """Retrieve stored company data for memo generation"""
@@ -247,7 +246,7 @@ def get_stored_company_data(db: Session, source_id: int) -> Dict[str, Any]:
         return {"error": "Source not found"}
     
     return {
-        "source_id": source_id,  # ADD THIS
+        "source_id": source_id,  
         "company_name": source.company_name,
         "affinity_data": source.affinity_data,
         "perplexity_data": source.perplexity_data,

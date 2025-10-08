@@ -190,47 +190,6 @@ def search_company_comprehensive_with_stats(company_name: str, description: str 
     
     return enhanced_results
 
-def search_company_info(company_name: str) -> Dict[str, Any]:
-    """
-    Enhanced comprehensive company search with startup-specific prompts.
-    """
-    try:
-        enhanced_data = search_company_comprehensive_with_stats(company_name)
-        
-        research_parts = []
-        
-        if enhanced_data.get("categories"):
-            for category, data in enhanced_data["categories"].items():
-                if data.get("search_successful") and data.get("content"):
-                    title = category.replace('_', ' ').title()
-                    research_parts.append(f"=== {title} ===\n{data['content']}")
-        
-        if enhanced_data.get("stats_categories"):
-            research_parts.append("\n=== QUANTITATIVE METRICS & STATISTICS ===")
-            for category, data in enhanced_data["stats_categories"].items():
-                if data.get("search_successful") and data.get("content"):
-                    title = category.replace('_', ' ').title()
-                    research_parts.append(f"\n--- {title} ---\n{data['content']}")
-        
-        combined_content = "\n\n".join(research_parts)
-        
-        return {
-            "company_name": company_name,
-            "research_data": combined_content,
-            "enhanced_data": enhanced_data,
-            "search_successful": len(research_parts) > 0
-        }
-        
-    except Exception as e:
-        return {
-            "company_name": company_name,
-            "error": str(e),
-            "search_successful": False
-        }
-    
-
-# ...existing code...
-
 def search_company_comprehensive(company_name: str, db, description: str = "") -> Dict[str, Any]:
     """
     Main entry point for comprehensive company search with optional description.

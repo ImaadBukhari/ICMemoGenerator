@@ -7,6 +7,7 @@ from backend.auth import get_current_user
 from backend.db.models import User
 from backend.services.affinity_service import get_companies, get_company_details
 
+# Affinity routes for fetching company data
 router = APIRouter()
 
 @router.get("/affinity/companies")

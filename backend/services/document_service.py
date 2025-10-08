@@ -24,7 +24,7 @@ def create_memo_styles(doc: Document):
     styles = doc.styles
     
     # Choose your font here - change this to whatever you want
-    DOCUMENT_FONT = 'Bangla Sangam MN'  # Change to: 'Times New Roman', 'Arial', etc.
+    DOCUMENT_FONT = 'Bangla Sangam MN'  
     
     # Title style
     if 'Memo Title' not in [s.name for s in styles]:
@@ -53,9 +53,9 @@ def create_memo_styles(doc: Document):
         heading_font.name = DOCUMENT_FONT
         heading_font.size = Pt(12)
         heading_font.bold = True
-        heading_font.color.rgb = None  # Default color
-        heading_style.paragraph_format.space_before = Pt(18)  # More space before
-        heading_style.paragraph_format.space_after = Pt(12)   # More space after
+        heading_font.color.rgb = None 
+        heading_style.paragraph_format.space_before = Pt(18)  
+        heading_style.paragraph_format.space_after = Pt(12)   
     
     # Subsection heading style
     if 'Subsection Heading' not in [s.name for s in styles]:
@@ -67,15 +67,15 @@ def create_memo_styles(doc: Document):
         sub_heading_style.paragraph_format.space_before = Pt(12)
         sub_heading_style.paragraph_format.space_after = Pt(8)
     
-    # Assessment table heading style - IMPROVED SPACING
+    # Assessment table heading style 
     if 'Assessment Table Heading' not in [s.name for s in styles]:
         assessment_table_style = styles.add_style('Assessment Table Heading', WD_STYLE_TYPE.PARAGRAPH)
         assessment_table_font = assessment_table_style.font
         assessment_table_font.name = DOCUMENT_FONT
-        assessment_table_font.size = Pt(12)  # Slightly larger
+        assessment_table_font.size = Pt(12)  
         assessment_table_font.bold = True
-        assessment_table_style.paragraph_format.space_before = Pt(24)  # More space before
-        assessment_table_style.paragraph_format.space_after = Pt(12)   # Space after
+        assessment_table_style.paragraph_format.space_before = Pt(24) 
+        assessment_table_style.paragraph_format.space_after = Pt(12)  
     
     # Body text style
     if 'Memo Body' not in [s.name for s in styles]:
@@ -83,16 +83,16 @@ def create_memo_styles(doc: Document):
         body_font = body_style.font
         body_font.name = DOCUMENT_FONT
         body_font.size = Pt(10)
-        body_style.paragraph_format.line_spacing = 1.2  # Better line spacing
-        body_style.paragraph_format.space_after = Pt(8)  # More space after paragraphs
+        body_style.paragraph_format.line_spacing = 1.2  
+        body_style.paragraph_format.space_after = Pt(8) 
     
-    # List Bullet style - IMPROVED SPACING
+    # List Bullet style 
     try:
         list_bullet_style = styles['List Bullet']
         list_bullet_font = list_bullet_style.font
         list_bullet_font.name = DOCUMENT_FONT
         list_bullet_font.size = Pt(10)
-        list_bullet_style.paragraph_format.space_after = Pt(4)  # Space between bullets
+        list_bullet_style.paragraph_format.space_after = Pt(4) 
     except KeyError:
         # Create List Bullet style if it doesn't exist
         list_bullet_style = styles.add_style('List Bullet', WD_STYLE_TYPE.PARAGRAPH)
@@ -100,14 +100,15 @@ def create_memo_styles(doc: Document):
         list_bullet_font.name = DOCUMENT_FONT
         list_bullet_font.size = Pt(10)
         list_bullet_style.paragraph_format.left_indent = Inches(0.25)
-        list_bullet_style.paragraph_format.space_after = Pt(4)  # Space between bullets
-        list_bullet_style.paragraph_format.line_spacing = 1.2  # Better line spacing
+        list_bullet_style.paragraph_format.space_after = Pt(4)  
+        list_bullet_style.paragraph_format.line_spacing = 1.2 
 
 def clean_markdown_formatting(content: str, section_name: str) -> str:
     """
     Clean markdown formatting from content based on section type
     """
     # For executive summary and company snapshot, remove ## and ### headers entirely
+    # This is because these sections should be concise summaries without subheaders
     if section_name in ['executive_summary', 'company_snapshot']:
         # Remove lines that start with ##, ###, or ####
         lines = content.split('\n')

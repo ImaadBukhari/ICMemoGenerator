@@ -12,6 +12,8 @@ from backend.services.data_gathering_service import get_stored_company_data
 from backend.services.memo_generation_service import generate_comprehensive_memo, compile_final_memo
 from backend.services.document_service import generate_word_document, get_document_summary
 
+#This file handles memo generation and document creation
+
 router = APIRouter()
 
 class MemoGenerationRequest(BaseModel):

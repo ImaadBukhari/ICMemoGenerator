@@ -1,6 +1,7 @@
 import React from 'react';
 import './LoadingScreen.css';
 
+// Loading screen component showing progress of memo generation
 function LoadingScreen({ currentSection, progress, totalSections, completedSections }) {
   return (
     <div className="loading-screen">

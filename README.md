@@ -134,18 +134,6 @@ OUR FIRM'S INVESTMENT PHILOSOPHY:
 """
 ```
 
-**Reasoning Frameworks (for complex sections):**
-```python
-REASONING_FRAMEWORKS = {
-    "market_opportunity": """
-ANALYTICAL FRAMEWORK:
-1. Market Sizing: TAM → SAM → SOM
-2. Growth: Historical % → Projected CAGR
-...
-""",
-}
-```
-
 ### RAG Configuration
 
 Adjust retrieval settings in [`backend/services/rag_service.py`](backend/services/rag_service.py):

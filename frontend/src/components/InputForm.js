@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import './InputForm.css';
 
+// Input form component for generating IC memo
 function InputForm({ onGenerate }) {
   const [companyName, setCompanyName] = useState('');
   const [affinityId, setAffinityId] = useState('');

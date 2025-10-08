@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import './DownloadScreen.css';
 
+// This component displays the download screen after memo generation
 function DownloadScreen({ memoData, onReset }) {
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState(null);

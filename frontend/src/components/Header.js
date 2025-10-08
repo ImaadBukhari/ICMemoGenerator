@@ -1,6 +1,7 @@
 import React from 'react';
 import './Header.css';
 
+// Header component with logo and title
 function Header() {
   return (
     <header className="header">

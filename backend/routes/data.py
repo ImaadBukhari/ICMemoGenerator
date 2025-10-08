@@ -12,6 +12,7 @@ from backend.services.data_gathering_service import (
     list_user_sources
 )
 
+#This file handles data gathering from Affinity and Google Drive, and storing it in the database
 router = APIRouter()
 
 class DataGatheringRequest(BaseModel):
