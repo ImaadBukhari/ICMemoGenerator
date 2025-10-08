@@ -2,7 +2,7 @@ import json
 import os
 from typing import Dict, Any, List, Optional
 from sqlalchemy.orm import Session
-from backend.db.models import MemoRequest, MemoSection
+from backend.db.models import MemoRequest, MemoSection, Source  # ADD Source
 from backend.services.gpt_service import generate_text
 from backend.services.rag_service import build_company_knowledge_base, retrieve_context_for_section
 
@@ -12,6 +12,23 @@ def load_memo_prompts() -> Dict[str, Any]:
     prompts_path = os.path.join(os.path.dirname(__file__), '..', 'schemas', 'memo_prompts.json')
     with open(prompts_path, 'r') as f:
         return json.load(f)
+
+def get_stored_company_data(db: Session, source_id: int) -> Dict[str, Any]:
+    """Retrieve stored company data for memo generation"""
+    source = db.query(Source).filter(Source.id == source_id).first()
+    
+    if not source:
+        return {"error": "Source not found"}
+    
+    return {
+        "source_id": source_id,
+        "company_name": source.company_name,
+        "company_description": source.company_description,  # ADD THIS LINE
+        "affinity_data": source.affinity_data,
+        "perplexity_data": source.perplexity_data,
+        "gmail_data": source.gmail_data,
+        "drive_data": source.drive_data
+    }
 
 def format_affinity_data(affinity_data: Dict[str, Any]) -> str:
     """Format Affinity CRM data for prompts"""
@@ -58,11 +75,20 @@ def generate_memo_section_with_rag(
         # Format Affinity data
         affinity_section = format_affinity_data(company_data.get("affinity_data", {}))
         
+        company_name = company_data.get("company_name", "the company")
+        company_description = company_data.get("company_description", "")
+        
         # Create enhanced prompt with RAG context
         enhanced_prompt = f"""
+
+COMPANY: {company_name}
+{f"DESCRIPTION: {company_description}" if company_description else ""}
+
 {prompt}
 
-=== CRM DATA ===
+You are generating a section of a wider memo, so while you should tie everything together at the end, don't have an explicit conclusion section.
+
+=== CRM DATA (Source: Crunchbase) ===
 {affinity_section}
 
 === RELEVANT RESEARCH & DATA (Retrieved via semantic search) ===
@@ -71,21 +97,22 @@ def generate_memo_section_with_rag(
 IMPORTANT INSTRUCTIONS:
 1. Base your response ONLY on the data provided above
 2. When citing information, reference the citation numbers [1], [2], etc.
-3. Prioritize quantitative data, specific metrics, and statistics
-4. If specific information is not available, clearly state that rather than making assumptions
-5. Include specific numbers, percentages, growth rates, and financial figures when mentioned
-6. For assessments, justify ratings with specific data points from the research
-7. Avoid the use of 'we', focus on the facts and use a less active voice. When absolutely necessary, use 'the Firm' or 'Wyld VC' 
+3. All CRM data should be cited as "Source: Crunchbase"
+4. Prioritize quantitative data, specific metrics, and statistics
+5. If specific information is not available, clearly state that rather than making assumptions
+6. Include specific numbers, percentages, growth rates, and financial figures when mentioned
 
 SOURCES USED: {len(rag_context['sources'])} unique sources found
 """
         
         # Generate content using GPT
-        system_message = f"""
-You are an expert venture capital analyst writing detailed investment memos for Wyld VC. 
-Your analysis should be highly data-driven, using specific metrics and statistics.
-Always cite your sources using the citation numbers provided [1], [2], etc.
-Be transparent about data limitations and avoid speculation.
+        system_message = """
+You are a venture capital investment analyst at Wyld VC, drafting a data-driven Investment Committee (IC) memo.
+Write in a neutral, factual tone but emphasize analytical insight.
+Always back claims with specific data and citations [1], [2], etc.
+Avoid marketing language or speculation; use quantitative metrics and relative comparisons (e.g., "30% higher than peers").
+Each section must be self-contained, concise (300–500 words), and logically structured for a reader who will skim.
+End each section with a short insight summary (2–3 sentences) highlighting key implications or open questions.
 """
         
         content = generate_text(
@@ -96,12 +123,17 @@ Be transparent about data limitations and avoid speculation.
             temperature=0.2
         )
         
+        # Add Crunchbase to sources if Affinity data was used
+        sources = rag_context['sources'].copy()
+        if company_data.get("affinity_data"):
+            sources.append("Crunchbase (via Affinity CRM)")
+        
         # Store the section with source information
         memo_section = MemoSection(
             memo_request_id=memo_request_id,
             section_name=section_key,
             content=content,
-            data_sources=rag_context['sources'],  # Store actual sources used
+            data_sources=sources,  # Include Crunchbase
             status="completed"
         )
         
@@ -109,15 +141,15 @@ Be transparent about data limitations and avoid speculation.
         db.commit()
         db.refresh(memo_section)
         
-        print(f"✅ Section '{section_key}' generated successfully with {len(rag_context['sources'])} sources")
+        print(f"✅ Section '{section_key}' generated successfully with {len(sources)} sources")
         
         return {
             "status": "success",
             "section_name": section_key,
             "section_id": memo_section.id,
             "content_length": len(content),
-            "data_sources_used": rag_context['sources'],
-            "sources_count": len(rag_context['sources'])
+            "data_sources_used": sources,
+            "sources_count": len(sources)
         }
         
     except Exception as e:
@@ -134,12 +166,9 @@ Be transparent about data limitations and avoid speculation.
         db.commit()
         
         return {
-            "status": "success",
+            "status": "failed",  # FIXED
             "section_name": section_key,
-            "section_id": memo_section.id,
-            "content_length": len(content),
-            "data_sources_used": rag_context['sources'],
-            "sources_count": len(rag_context['sources'])
+            "error": str(e)  # FIXED
         }
 
 def generate_comprehensive_memo(
