@@ -426,7 +426,71 @@ alembic upgrade head
 2. [`backend/services/perplexity_service.py`](backend/services/perplexity_service.py) - Change `extract_citations_from_content()`
 3. [`backend/services/document_service.py`](backend/services/document_service.py) - Modify `add_sources_section()`
 
+## 🚀 Deployment
 
+### Prerequisites
+
+- Google Cloud Platform account with billing enabled
+- Firebase account (uses same GCP project)
+- Domain name (optional, for custom URLs)
+
+### Quick Deployment (What You Actually Do)
+
+#### 1. Backend Deployment to Cloud Run
+
+```bash
+# One-time setup: Store secrets in Secret Manager
+echo -n "YOUR_OPENAI_API_KEY" | gcloud secrets create openai-api-key --data-file=-
+echo -n "YOUR_PERPLEXITY_API_KEY" | gcloud secrets create perplexity-api-key --data-file=-
+echo -n "YOUR_AFFINITY_API_KEY" | gcloud secrets create affinity-api-key --data-file=-
+echo -n "YOUR_GOOGLE_CLIENT_ID" | gcloud secrets create google-client-id --data-file=-
+echo -n "YOUR_GOOGLE_CLIENT_SECRET" | gcloud secrets create google-client-secret --data-file=-
+echo -n "RANDOM_JWT_SECRET" | gcloud secrets create jwt-secret-key --data-file=-
+echo -n "YOUR_DB_PASSWORD" | gcloud secrets create db-password --data-file=-
+
+# Build the Docker image
+cd backend
+gcloud builds submit --tag gcr.io/$(gcloud config get-value project)/icmemo-backend
+
+# Deploy (using the script)
+cd ../infra
+chmod +x deploy.sh
+./deploy.sh
+```
+
+That's it! The [`deploy.sh`](infra/deploy.sh) script handles:
+- ✅ Pulling secrets from Secret Manager
+- ✅ Deploying to Cloud Run with all environment variables
+- ✅ Configuring Cloud SQL connection
+- ✅ Setting CPU, memory, and scaling limits
+
+**Your backend is now live!** Get the URL:
+```bash
+gcloud run services describe icmemo-backend --region us-central1 --format='value(status.url)'
+```
+
+#### 2. Frontend Deployment to Firebase Hosting
+
+```bash
+# One-time setup
+cd frontend
+npm install -g firebase-tools
+firebase login
+firebase init hosting
+# Select: build, Yes (SPA), No (GitHub), No (overwrite)
+
+# Get backend URL
+BACKEND_URL=$(gcloud run services describe icmemo-backend --region us-central1 --format='value(status.url)')
+
+# Set environment variable
+echo "REACT_APP_API_URL=$BACKEND_URL" > .env.production
+
+# Build and deploy
+npm run build
+firebase deploy --only hosting
+```
+
+**Your frontend is now live at** `https://YOUR-PROJECT.web.app`!
 
 
 
