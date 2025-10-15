@@ -3,6 +3,7 @@ import requests
 from typing import Dict, Any, List, Optional
 from dotenv import load_dotenv
 import logging
+from typing import Optional
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -79,14 +80,6 @@ class AffinityService:
         except requests.exceptions.RequestException as e:
             logger.error(f"Error getting company data from Affinity: {e}")
             raise
-
-
-def get_companies(page_url: str | None = None):
-    """Get the firm's entire 'rolodex' of companies."""
-    url = page_url or f"{BASE_URL}/companies"
-    resp = requests.get(url, headers=HEADERS, timeout=30)
-    resp.raise_for_status()
-    return resp.json()
 
 
 def get_company_details(company_id: str):

@@ -27,10 +27,15 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="IC Memo Generator", version="1.0.0")
 
-# CORS middleware
+# CORS middleware - REMOVE the "*" and only keep specific origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", os.getenv("FRONTEND_URL", "http://localhost:3000")],
+    allow_origins=[
+        "https://icmemogenerator.web.app",
+        "https://icmemogenerator.firebaseapp.com",
+        "http://localhost:3000",
+        "http://localhost:8000"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

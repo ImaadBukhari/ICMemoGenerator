@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import './DownloadScreen.css';
 
+// Get API URL from environment variable
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+
 // This component displays the download screen after memo generation
 function DownloadScreen({ memoData, onReset }) {
   const [downloading, setDownloading] = useState(false);
@@ -11,7 +14,7 @@ function DownloadScreen({ memoData, onReset }) {
       setDownloading(true);
       setError(null);
       
-      const response = await fetch(`http://localhost:8000/api/memo/${memoData.memoId}/download`);
+      const response = await fetch(`${API_URL}/api/memo/${memoData.memoId}/download`);
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));

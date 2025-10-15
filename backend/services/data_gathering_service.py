@@ -5,6 +5,9 @@ from backend.services.affinity_service import get_company_details
 from backend.services.google_service import search_files, get_docs_service
 from backend.services.perplexity_service import search_company_comprehensive
 
+import fitz 
+import os
+
 def extract_text_from_doc(doc_content: Dict) -> str:
     """Extract plain text from Google Docs API response."""
     text = ""
@@ -168,7 +171,8 @@ def gather_and_store_company_data(
     results["perplexity_success"] = perplexity_result["success"]
     if not perplexity_result["success"]:
         results["errors"].append(f"Perplexity error: {perplexity_result['error']}")
-    
+
+
     # 4. Store all data in the database
     try:
         source = Source(
@@ -253,3 +257,5 @@ def get_stored_company_data(db: Session, source_id: int) -> Dict[str, Any]:
         "gmail_data": source.gmail_data,
         "drive_data": source.drive_data
     }
+
+

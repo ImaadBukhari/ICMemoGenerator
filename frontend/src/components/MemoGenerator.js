@@ -4,6 +4,9 @@ import LoadingScreen from './LoadingScreen';
 import DownloadScreen from './DownloadScreen';
 import './MemoGenerator.css';
 
+// Get API URL from environment variable
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+
 // Main component managing the memo generation process
 function MemoGenerator() {
   const [stage, setStage] = useState('input');
@@ -15,7 +18,7 @@ function MemoGenerator() {
   
   const pollingIntervalRef = useRef(null);
 
-  const handleGenerate = async (companyName, affinityId, description) => {  // Add description parameter
+  const handleGenerate = async (companyName, affinityId, description) => {
     setStage('loading');
     setCurrentSection('Gathering company data...');
     setProgress(0);
@@ -23,13 +26,13 @@ function MemoGenerator() {
 
     // Step 1: Gather company data
     try {
-      const gatherResponse = await fetch('http://localhost:8000/api/data/gather', {
+      const gatherResponse = await fetch(`${API_URL}/api/data/gather`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           company_name: companyName,
           company_id: affinityId,
-          description: description  // Add description
+          description: description
         })
       });
 
@@ -41,7 +44,7 @@ function MemoGenerator() {
       setCurrentSection('Starting memo generation...');
       
       // Start memo generation 
-      const memoResponse = await fetch('http://localhost:8000/api/memo/generate', {
+      const memoResponse = await fetch(`${API_URL}/api/memo/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ source_id: gatherData.source_id })
@@ -64,11 +67,11 @@ function MemoGenerator() {
     }
   };
 
-  //  Polling function to check memo generation status
+  // Polling function to check memo generation status
   const startPolling = (memoId, companyName) => {
     pollingIntervalRef.current = setInterval(async () => {
       try {
-        const response = await fetch(`http://localhost:8000/api/memo/${memoId}/sections`);
+        const response = await fetch(`${API_URL}/api/memo/${memoId}/sections`);
         if (!response.ok) return;
         
         const data = await response.json();
@@ -103,7 +106,7 @@ function MemoGenerator() {
           setProgress(100);
           setCurrentSection('Creating Word document...');
           
-          const docResponse = await fetch(`http://localhost:8000/api/memo/${memoId}/generate-document`, {
+          const docResponse = await fetch(`${API_URL}/api/memo/${memoId}/generate-document`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
           });
@@ -128,7 +131,7 @@ function MemoGenerator() {
     }, 1000);
   };
 
-  //  Format section keys to user-friendly names
+  // Format section keys to user-friendly names
   const formatSectionName = (sectionKey) => {
     const sectionNames = {
       'executive_summary': 'Executive Summary',

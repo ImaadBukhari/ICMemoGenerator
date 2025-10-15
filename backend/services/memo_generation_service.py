@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from backend.db.models import MemoRequest, MemoSection, Source  # ADD Source
 from backend.services.gpt_service import generate_text
 from backend.services.rag_service import build_company_knowledge_base, retrieve_context_for_section
+import re
 
 # Load memo prompts
 def load_memo_prompts() -> Dict[str, Any]:
@@ -147,9 +148,8 @@ End each section with a short insight summary (2–3 sentences) highlighting key
             "status": "success",
             "section_name": section_key,
             "section_id": memo_section.id,
-            "content_length": len(content),
+            "content": content,
             "data_sources_used": sources,
-            "sources_count": len(sources)
         }
         
     except Exception as e:
@@ -176,11 +176,15 @@ def generate_comprehensive_memo(
     db: Session,
     memo_request_id: int
 ) -> Dict[str, Any]:
-    """Generate all memo sections systematically using RAG"""
+    """Generate all memo sections systematically using RAG, maintaining global citations"""
     
     print(f"Starting comprehensive memo generation for memo request {memo_request_id}")
     
-    # Build FAISS index from company data
+    # === GLOBAL CITATION MAP ===
+    global_citation_map = {}
+    next_citation_num = 1
+    
+    # === BUILD KNOWLEDGE BASE ===
     print("Building knowledge base with embeddings...")
     faiss_index, chunks = build_company_knowledge_base(db, company_data.get("source_id"))
     
@@ -194,7 +198,7 @@ def generate_comprehensive_memo(
     
     print(f"✅ Knowledge base built with {len(chunks)} chunks")
     
-    # Load prompts
+    # === LOAD PROMPTS ===
     try:
         prompts = load_memo_prompts()
     except Exception as e:
@@ -213,7 +217,7 @@ def generate_comprehensive_memo(
         "generation_summary": {}
     }
     
-    # Generate main sections
+    # === SECTION LISTS ===
     main_sections = [
         "executive_summary",
         "company_snapshot", 
@@ -226,7 +230,6 @@ def generate_comprehensive_memo(
         "deal_considerations"
     ]
     
-    # Generate assessment sections
     assessment_sections = [
         ("assessment_people", "people"),
         ("assessment_market_opportunity", "market_opportunity"),
@@ -236,7 +239,7 @@ def generate_comprehensive_memo(
         ("assessment_deal_considerations", "deal_considerations")
     ]
     
-    # Process main sections
+    # === PROCESS MAIN SECTIONS ===
     for section in main_sections:
         if section in prompts:
             result = generate_memo_section_with_rag(
@@ -250,13 +253,35 @@ def generate_comprehensive_memo(
             )
             
             if result["status"] == "success":
+                # ---- GLOBAL CITATION REMAPPING ----
+                section_text = result["content"]
+                section_sources = result.get("data_sources_used", [])
+                
+                for local_idx, source in enumerate(section_sources, 1):
+                    if source not in global_citation_map:
+                        global_citation_map[source] = next_citation_num
+                        next_citation_num += 1
+                    
+                    # Replace [1], [2], etc. with global index
+                    section_text = re.sub(
+                        rf'\[{local_idx}\]',
+                        f'[{global_citation_map[source]}]',
+                        section_text
+                    )
+                
+                # Update stored section content in DB
+                section_obj = db.query(MemoSection).filter(MemoSection.id == result["section_id"]).first()
+                if section_obj:
+                    section_obj.content = section_text
+                    db.commit()
+                
                 results["sections_completed"].append(result)
             else:
                 results["sections_failed"].append(result)
         else:
             print(f"⚠️ Prompt not found for section: {section}")
     
-    # Process assessment sections
+    # === PROCESS ASSESSMENT SECTIONS ===
     for assessment_key, prompt_key in assessment_sections:
         if "assessment_summary" in prompts and prompt_key in prompts["assessment_summary"]:
             result = generate_memo_section_with_rag(
@@ -270,17 +295,38 @@ def generate_comprehensive_memo(
             )
             
             if result["status"] == "success":
+                section_text = result["content"]
+                section_sources = result.get("data_sources_used", [])
+                
+                for local_idx, source in enumerate(section_sources, 1):
+                    if source not in global_citation_map:
+                        global_citation_map[source] = next_citation_num
+                        next_citation_num += 1
+                    
+                    section_text = re.sub(
+                        rf'\[{local_idx}\]',
+                        f'[{global_citation_map[source]}]',
+                        section_text
+                    )
+                
+                section_obj = db.query(MemoSection).filter(MemoSection.id == result["section_id"]).first()
+                if section_obj:
+                    section_obj.content = section_text
+                    db.commit()
+                
                 results["sections_completed"].append(result)
             else:
                 results["sections_failed"].append(result)
         else:
             print(f"⚠️ Assessment prompt not found for: {assessment_key}")
     
-    # Calculate final results
+    # === FINALIZE ===
     results["total_sections"] = len(results["sections_completed"]) + len(results["sections_failed"])
-    results["success_rate"] = len(results["sections_completed"]) / results["total_sections"] if results["total_sections"] > 0 else 0
+    results["success_rate"] = (
+        len(results["sections_completed"]) / results["total_sections"]
+        if results["total_sections"] > 0 else 0
+    )
     
-    # Determine final status
     if len(results["sections_failed"]) == 0:
         results["status"] = "completed"
     elif len(results["sections_completed"]) > 0:
@@ -296,36 +342,50 @@ def generate_comprehensive_memo(
     }
     
     print(f"Memo generation completed: {results['success_rate']*100:.1f}% success rate")
+    print(f"📚 Global citation count: {len(global_citation_map)} sources mapped up to [{next_citation_num - 1}]")
     
     return results
 
 def compile_final_memo(db: Session, memo_request_id: int) -> str:
-    """Compile all sections into final memo with sources"""
+    """Compile all completed sections into a final memo with global citations"""
+
+    # Fetch completed sections for this memo
     sections = db.query(MemoSection).filter(
         MemoSection.memo_request_id == memo_request_id,
         MemoSection.status == "completed"
     ).all()
-    
+
+    if not sections:
+        return "No completed sections found for this memo."
+
     memo_parts = []
     all_sources = set()
-    
+
+    # Define logical display order
     section_order = [
-        "executive_summary", "company_snapshot", "people", 
+        "executive_summary", "company_snapshot", "people",
         "market_opportunity", "competitive_landscape", "product",
-        "financial", "traction_validation", "deal_considerations"
+        "financial", "traction_validation", "deal_considerations",
+        "assessment_people", "assessment_market_opportunity",
+        "assessment_product", "assessment_financials",
+        "assessment_traction_validation", "assessment_deal_considerations"
     ]
-    
+
+    # Build body of the memo
     for section_name in section_order:
         section = next((s for s in sections if s.section_name == section_name), None)
         if section and section.content:
-            memo_parts.append(f"## {section_name.replace('_', ' ').title()}\n\n{section.content}")
+            title = section_name.replace("_", " ").title()
+            memo_parts.append(f"## {title}\n\n{section.content.strip()}")
             if section.data_sources:
                 all_sources.update(section.data_sources)
-    
-    # Add sources section
+
+    # Build Sources section
     if all_sources:
         memo_parts.append("\n## Sources\n")
-        for i, source in enumerate(sorted(all_sources), 1):
-            memo_parts.append(f"{i}. {source}")
-    
+        # Sort alphabetically for consistent order
+        sorted_sources = sorted(list(all_sources))
+        for idx, source in enumerate(sorted_sources, 1):
+            memo_parts.append(f"[{idx}] {source}")
+
     return "\n\n".join(memo_parts)
