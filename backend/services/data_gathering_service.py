@@ -5,7 +5,6 @@ from backend.services.affinity_service import get_company_details
 from backend.services.google_service import search_files, get_docs_service
 from backend.services.perplexity_service import search_company_comprehensive
 
-import fitz 
 import os
 
 def extract_text_from_doc(doc_content: Dict) -> str:

@@ -1,13 +1,11 @@
+// src/components/MemoGenerator.js
 import React, { useState, useRef } from 'react';
 import InputForm from './InputForm';
 import LoadingScreen from './LoadingScreen';
 import DownloadScreen from './DownloadScreen';
 import './MemoGenerator.css';
+import api from '../api'; // ✅ Authenticated Axios client
 
-// Get API URL from environment variable
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
-
-// Main component managing the memo generation process
 function MemoGenerator() {
   const [stage, setStage] = useState('input');
   const [memoData, setMemoData] = useState(null);
@@ -15,7 +13,7 @@ function MemoGenerator() {
   const [progress, setProgress] = useState(0);
   const [completedSections, setCompletedSections] = useState(0);
   const [totalSections] = useState(15);
-  
+
   const pollingIntervalRef = useRef(null);
 
   const handleGenerate = async (companyName, affinityId, description) => {
@@ -24,40 +22,24 @@ function MemoGenerator() {
     setProgress(0);
     setCompletedSections(0);
 
-    // Step 1: Gather company data
     try {
-      const gatherResponse = await fetch(`${API_URL}/api/data/gather`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          company_name: companyName,
-          company_id: affinityId,
-          description: description
-        })
+      // 1️⃣ Gather company data
+      const { data: gatherData } = await api.post('/data/gather', {
+        company_name: companyName,
+        company_id: affinityId,
+        description: description,
       });
 
-      if (!gatherResponse.ok) {
-        throw new Error('Failed to gather company data');
-      }
-
-      const gatherData = await gatherResponse.json();
       setCurrentSection('Starting memo generation...');
-      
-      // Start memo generation 
-      const memoResponse = await fetch(`${API_URL}/api/memo/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ source_id: gatherData.source_id })
+
+      // 2️⃣ Start memo generation
+      const { data: memoResult } = await api.post('/memo/generate', {
+        source_id: gatherData.source_id,
       });
 
-      if (!memoResponse.ok) {
-        throw new Error('Failed to start memo generation');
-      }
-
-      const memoResult = await memoResponse.json();
       const memoId = memoResult.memo_request_id;
 
-      // NOW start polling - generation is happening in background
+      // 3️⃣ Begin polling progress
       startPolling(memoId, companyName);
 
     } catch (error) {
@@ -67,23 +49,19 @@ function MemoGenerator() {
     }
   };
 
-  // Polling function to check memo generation status
+  // Poll memo progress
   const startPolling = (memoId, companyName) => {
     pollingIntervalRef.current = setInterval(async () => {
       try {
-        const response = await fetch(`${API_URL}/api/memo/${memoId}/sections`);
-        if (!response.ok) return;
-        
-        const data = await response.json();
+        const { data } = await api.get(`/memo/${memoId}/sections`);
         const sections = data.sections || [];
-        
+
         const completed = sections.filter(s => s.status === 'completed').length;
         const progressPercent = (completed / totalSections) * 100;
-        
+
         setCompletedSections(completed);
         setProgress(progressPercent);
-        
-        // Find current section
+
         const expectedSections = [
           'executive_summary', 'company_snapshot', 'people', 'market_opportunity',
           'competitive_landscape', 'product', 'financial', 'traction_validation',
@@ -91,39 +69,31 @@ function MemoGenerator() {
           'assessment_product', 'assessment_financials', 'assessment_traction_validation',
           'assessment_deal_considerations'
         ];
-        
+
         const completedNames = sections.filter(s => s.status === 'completed').map(s => s.section_name);
         const nextSection = expectedSections.find(s => !completedNames.includes(s));
-        
+
         if (nextSection) {
           setCurrentSection(formatSectionName(nextSection));
         }
 
-        // Check if all done
+        // 4️⃣ When finished, generate final doc
         if (data.overall_status === 'completed' || data.overall_status === 'partial_success') {
           clearInterval(pollingIntervalRef.current);
-          
           setProgress(100);
           setCurrentSection('Creating Word document...');
-          
-          const docResponse = await fetch(`${API_URL}/api/memo/${memoId}/generate-document`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-          });
 
-          if (docResponse.ok) {
-            const docResult = await docResponse.json();
-            
-            setTimeout(() => {
-              setMemoData({
-                memoId: memoId,
-                companyName: companyName,
-                filename: docResult.filename,
-                sections: completed
-              });
-              setStage('download');
-            }, 500);
-          }
+          const { data: docResult } = await api.post(`/memo/${memoId}/generate-document`);
+
+          setTimeout(() => {
+            setMemoData({
+              memoId,
+              companyName,
+              filename: docResult.filename,
+              sections: completed,
+            });
+            setStage('download');
+          }, 500);
         }
       } catch (err) {
         console.error('Polling error:', err);
@@ -131,24 +101,23 @@ function MemoGenerator() {
     }, 1000);
   };
 
-  // Format section keys to user-friendly names
   const formatSectionName = (sectionKey) => {
     const sectionNames = {
-      'executive_summary': 'Executive Summary',
-      'company_snapshot': 'Company Snapshot',
-      'people': 'Team & Leadership',
-      'market_opportunity': 'Market Opportunity',
-      'competitive_landscape': 'Competitive Landscape',
-      'product': 'Product & Technology',
-      'financial': 'Financial Analysis',
-      'traction_validation': 'Traction & Validation',
-      'deal_considerations': 'Deal Considerations',
-      'assessment_people': 'Scorecard: Team',
-      'assessment_market_opportunity': 'Scorecard: Market',
-      'assessment_product': 'Scorecard: Product',
-      'assessment_financials': 'Scorecard: Financial',
-      'assessment_traction_validation': 'Scorecard: Traction',
-      'assessment_deal_considerations': 'Scorecard: Deal'
+      executive_summary: 'Executive Summary',
+      company_snapshot: 'Company Snapshot',
+      people: 'Team & Leadership',
+      market_opportunity: 'Market Opportunity',
+      competitive_landscape: 'Competitive Landscape',
+      product: 'Product & Technology',
+      financial: 'Financial Analysis',
+      traction_validation: 'Traction & Validation',
+      deal_considerations: 'Deal Considerations',
+      assessment_people: 'Scorecard: Team',
+      assessment_market_opportunity: 'Scorecard: Market',
+      assessment_product: 'Scorecard: Product',
+      assessment_financials: 'Scorecard: Financial',
+      assessment_traction_validation: 'Scorecard: Traction',
+      assessment_deal_considerations: 'Scorecard: Deal',
     };
 
     return sectionNames[sectionKey] || sectionKey
@@ -173,14 +142,16 @@ function MemoGenerator() {
       <div className="content-container">
         {stage === 'input' && <InputForm onGenerate={handleGenerate} />}
         {stage === 'loading' && (
-          <LoadingScreen 
+          <LoadingScreen
             currentSection={currentSection}
             progress={progress}
             totalSections={totalSections}
             completedSections={completedSections}
           />
         )}
-        {stage === 'download' && <DownloadScreen memoData={memoData} onReset={handleReset} />}
+        {stage === 'download' && (
+          <DownloadScreen memoData={memoData} onReset={handleReset} />
+        )}
       </div>
     </div>
   );

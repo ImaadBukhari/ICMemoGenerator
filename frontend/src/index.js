@@ -1,8 +1,11 @@
 // filepath: frontend/src/index.js
+import "./firebase";
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './App';
+
+
 
 // Render the main application
 const root = ReactDOM.createRoot(document.getElementById('root'));

@@ -1,7 +1,7 @@
 """Add embeddings table for RAG
 
 Revision ID: 45fdb236fa52
-Revises: 
+Revises: f84bc65b9ac8
 Create Date: 2025-10-06 12:10:30.943227
 
 """

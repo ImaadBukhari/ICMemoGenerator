@@ -1,10 +1,8 @@
-import React, { useState } from 'react';
-import './DownloadScreen.css';
+// src/components/DownloadScreen.js
+import React, { useState } from "react";
+import "./DownloadScreen.css";
+import api from "../api"; // ✅ use authenticated Axios instance
 
-// Get API URL from environment variable
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
-
-// This component displays the download screen after memo generation
 function DownloadScreen({ memoData, onReset }) {
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState(null);
@@ -13,26 +11,29 @@ function DownloadScreen({ memoData, onReset }) {
     try {
       setDownloading(true);
       setError(null);
-      
-      const response = await fetch(`${API_URL}/api/memo/${memoData.memoId}/download`);
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || 'Download failed');
-      }
 
-      const blob = await response.blob();
+      // 1️⃣ Download file via authenticated request
+      const response = await api.get(`/memo/${memoData.memoId}/download`, {
+        responseType: "blob", // ✅ needed for file download
+      });
+
+      // 2️⃣ Create download link
+      const blob = new Blob([response.data]);
       const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
+      const a = document.createElement("a");
       a.href = url;
-      a.download = memoData.filename || `IC_Memo_${memoData.companyName.replace(/\s+/g, '_')}.docx`;
+      a.download =
+        memoData.filename ||
+        `IC_Memo_${memoData.companyName.replace(/\s+/g, "_")}.docx`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-    } catch (error) {
-      console.error('Download error:', error);
-      setError(error.message);
+    } catch (err) {
+      console.error("Download error:", err);
+      setError(
+        err.response?.data?.detail || err.message || "Download failed. Please try again."
+      );
     } finally {
       setDownloading(false);
     }
@@ -42,13 +43,17 @@ function DownloadScreen({ memoData, onReset }) {
     <div className="download-screen">
       <div className="success-icon">
         <svg viewBox="0 0 52 52" className="checkmark">
-          <circle className="checkmark-circle" cx="26" cy="26" r="25" fill="none"/>
-          <path className="checkmark-check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/>
+          <circle className="checkmark-circle" cx="26" cy="26" r="25" fill="none" />
+          <path
+            className="checkmark-check"
+            fill="none"
+            d="M14.1 27.2l7.1 7.2 16.7-16.8"
+          />
         </svg>
       </div>
 
       <h2 className="success-title">Memo Generated Successfully</h2>
-      
+
       <div className="memo-info">
         <div className="info-item">
           <span className="info-label">Company</span>
@@ -68,18 +73,23 @@ function DownloadScreen({ memoData, onReset }) {
       )}
 
       <div className="action-buttons">
-        <button 
-          onClick={handleDownload} 
+        <button
+          onClick={handleDownload}
           className="download-button"
           disabled={downloading}
         >
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-            <path d="M10 1v12m0 0l-4-4m4 4l4-4M2 13v4a2 2 0 002 2h12a2 2 0 002-2v-4" 
-                  stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <path
+              d="M10 1v12m0 0l-4-4m4 4l4-4M2 13v4a2 2 0 002 2h12a2 2 0 002-2v-4"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
           </svg>
-          {downloading ? 'Downloading...' : 'Download Memo'}
+          {downloading ? "Downloading..." : "Download Memo"}
         </button>
-        
+
         <button onClick={onReset} className="new-memo-button">
           Generate Another Memo
         </button>

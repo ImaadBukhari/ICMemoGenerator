@@ -1,10 +1,17 @@
 {
   "hosting": {
+    "site": "icmemogenerator",
     "public": "build",
     "ignore": [
       "firebase.json",
       "**/.*",
       "**/node_modules/**"
+    ],
+    "headers": [
+      {
+        "source": "**/*.@(js|css)",
+        "headers": [{ "key": "Cache-Control", "value": "no-store" }]
+      }
     ],
     "rewrites": [
       {

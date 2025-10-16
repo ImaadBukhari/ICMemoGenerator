@@ -14,7 +14,19 @@ from backend.services.document_service import generate_word_document, get_docume
 
 #This file handles memo generation and document creation
 
+from fastapi import APIRouter, Depends
+from backend.auth.firebase_auth import verify_firebase_token
+
 router = APIRouter()
+
+@router.post("/data/gather")
+async def gather_data(
+    payload: dict,
+    user=Depends(verify_firebase_token)
+):
+    # You can now access user info
+    user_uid = user.get("uid")
+    print(f"Authenticated request from UID: {user_uid}")
 
 class MemoGenerationRequest(BaseModel):
     source_id: int
