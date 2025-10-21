@@ -5,7 +5,7 @@ from typing import Optional, Dict, Any, List
 
 from backend.db.models import User
 from backend.database import get_db
-from backend.auth import get_current_user
+from backend.mock_auth import get_current_user
 from backend.services.data_gathering_service import (
     gather_and_store_company_data,
     get_stored_company_data,

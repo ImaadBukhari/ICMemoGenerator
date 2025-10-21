@@ -8,7 +8,7 @@ from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
 from backend.database import get_db
 from backend.db.models import User, GoogleToken
-from backend.auth import get_current_user
+#from backend.auth import get_current_user
 
 # This file handles Google OAuth2 authentication and token management
 
@@ -41,7 +41,7 @@ def create_flow():
     flow.redirect_uri = GOOGLE_REDIRECT_URI
     return flow
 
-@router.get("/auth/google/login")
+'''@router.get("/auth/google/login")
 async def google_login(
     request: Request,
     current_user: User = Depends(get_current_user),
@@ -69,7 +69,7 @@ async def google_login(
         return RedirectResponse(url=authorization_url)
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to initiate Google OAuth: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to initiate Google OAuth: {str(e)}")'''
 
 @router.get("/auth/google/callback")
 async def google_callback(

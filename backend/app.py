@@ -12,18 +12,23 @@ env_path = current_dir / '.env'
 load_dotenv(dotenv_path=env_path)
 
 from backend.db.models import Base
-from backend.routes.auth import router as auth_router
+# from backend.routes.auth import router as auth_router  # Commented out for local testing
 from backend.routes.memo import router as memo_router
 from backend.routes.affinity import router as affinity_router
 from backend.routes.data import router as data_router
 
-# Database setup
-DATABASE_URL = os.getenv("DATABASE_URL")
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+# Database setup - COMMENTED OUT FOR LOCAL TESTING
+# DATABASE_URL = os.getenv("DATABASE_URL")
+# engine = create_engine(DATABASE_URL)
+# SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-# Create tables
-Base.metadata.create_all(bind=engine)
+# Create tables - COMMENTED OUT FOR LOCAL TESTING
+# Base.metadata.create_all(bind=engine)
+
+# Mock database session for local testing
+from backend.mock_models import MockSession
+
+SessionLocal = MockSession
 
 app = FastAPI(title="IC Memo Generator", version="1.0.0")
 
@@ -50,7 +55,7 @@ def get_db():
         db.close()
 
 # Include routers
-app.include_router(auth_router, prefix="/api")
+# app.include_router(auth_router, prefix="/api")  # Commented out for local testing
 app.include_router(memo_router, prefix="/api")
 app.include_router(affinity_router, prefix="/api")
 app.include_router(data_router, prefix="/api")

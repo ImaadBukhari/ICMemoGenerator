@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 
 from backend.database import get_db
-from backend.auth import get_current_user
+from backend.mock_auth import get_current_user
 from backend.db.models import User
 from backend.services.affinity_service import get_company_details
 

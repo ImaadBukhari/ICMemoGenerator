@@ -5,31 +5,25 @@ from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 import os
 
-from backend.db.models import User, MemoRequest, MemoSection
+from backend.db.models import User, MemoSection
+from backend.mock_models import MockMemoRequest
 from backend.database import get_db, SessionLocal  # ADD SessionLocal import
-from backend.auth import get_current_user
+from backend.mock_auth import get_current_user
 from backend.services.data_gathering_service import get_stored_company_data
-from backend.services.memo_generation_service import generate_comprehensive_memo, compile_final_memo
-from backend.services.document_service import generate_word_document, get_document_summary
+from backend.services.memo_generation_service import generate_comprehensive_memo, generate_short_memo, compile_final_memo, compile_short_memo
+from backend.services.document_service import generate_word_document, generate_short_word_document, get_document_summary
 
 #This file handles memo generation and document creation
 
 from fastapi import APIRouter, Depends
-from backend.auth.firebase_auth import verify_firebase_token
+# from backend.auth.firebase_auth import verify_firebase_token  # Commented out for local testing
 
 router = APIRouter()
 
-@router.post("/data/gather")
-async def gather_data(
-    payload: dict,
-    user=Depends(verify_firebase_token)
-):
-    # You can now access user info
-    user_uid = user.get("uid")
-    print(f"Authenticated request from UID: {user_uid}")
-
+# Define models first
 class MemoGenerationRequest(BaseModel):
     source_id: int
+    memo_type: str = "full"  # "full" or "short"
 
 class SectionResult(BaseModel):
     section_name: str
@@ -45,16 +39,80 @@ class MemoResponse(BaseModel):
     status: str
     message: Optional[str] = None
 
-def generate_memo_background(company_data: Dict, memo_request_id: int):
+# Define the memo generation route FIRST to avoid conflicts with other routes
+@router.post("/memo/start-generation")
+async def generate_memo(
+    request: MemoGenerationRequest,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Start memo generation in background and return immediately"""
+    try:
+        company_data = get_stored_company_data(db, request.source_id)
+        
+        if "error" in company_data:
+            raise HTTPException(status_code=404, detail=company_data["error"])
+        
+        # Create memo request
+        memo_request = MockMemoRequest(
+            user_id=current_user.id,
+            company_name=company_data["company_name"],
+            sources_id=request.source_id,
+            memo_type=request.memo_type,
+            status="in_progress"
+        )
+        db.add(memo_request)
+        db.commit()
+        db.refresh(memo_request)
+        
+        # Start generation in background - DON'T PASS db SESSION
+        background_tasks.add_task(
+            generate_memo_background,
+            company_data,
+            memo_request.id,  # Only pass the ID, not the session
+            request.memo_type  # Pass memo type
+        )
+        
+        # Return immediately with memo_request_id
+        return {
+            "memo_request_id": memo_request.id,
+            "status": "in_progress",
+            "message": "Memo generation started"
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to start memo generation: {str(e)}")
+
+# @router.post("/data/gather")  # Commented out - using the one in data.py instead
+# async def gather_data(
+#     payload: dict,
+#     user=Depends(verify_firebase_token)
+# ):
+#     # You can now access user info
+#     user_uid = user.get("uid")
+#     print(f"Authenticated request from UID: {user_uid}")
+
+# Duplicate class definitions removed - now defined at top of file
+
+def generate_memo_background(company_data: Dict, memo_request_id: int, memo_type: str = "full"):
     """Background task to generate memo sections"""
     # CREATE A NEW DATABASE SESSION FOR THIS BACKGROUND TASK
     db = SessionLocal()
     try:
-        generation_result = generate_comprehensive_memo(
-            company_data, 
-            db, 
-            memo_request_id
-        )
+        # Choose generation method based on memo type
+        if memo_type == "short":
+            generation_result = generate_short_memo(
+                company_data, 
+                db, 
+                memo_request_id
+            )
+        else:
+            generation_result = generate_comprehensive_memo(
+                company_data, 
+                db, 
+                memo_request_id
+            )
         
         # Update memo request status
         memo_request = db.query(MemoRequest).filter(MemoRequest.id == memo_request_id).first()
@@ -71,47 +129,7 @@ def generate_memo_background(company_data: Dict, memo_request_id: int):
     finally:
         db.close()  # ALWAYS CLOSE THE SESSION
 
-@router.post("/memo/generate")
-async def generate_memo(
-    request: MemoGenerationRequest,
-    background_tasks: BackgroundTasks,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Start memo generation in background and return immediately"""
-    try:
-        company_data = get_stored_company_data(db, request.source_id)
-        
-        if "error" in company_data:
-            raise HTTPException(status_code=404, detail=company_data["error"])
-        
-        # Create memo request
-        memo_request = MemoRequest(
-            user_id=current_user.id,
-            company_name=company_data["company_name"],
-            sources_id=request.source_id,
-            status="in_progress"
-        )
-        db.add(memo_request)
-        db.commit()
-        db.refresh(memo_request)
-        
-        # Start generation in background - DON'T PASS db SESSION
-        background_tasks.add_task(
-            generate_memo_background,
-            company_data,
-            memo_request.id  # Only pass the ID, not the session
-        )
-        
-        # Return immediately with memo_request_id
-        return {
-            "memo_request_id": memo_request.id,
-            "status": "in_progress",
-            "message": "Memo generation started"
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to start memo generation: {str(e)}")
+# Duplicate route removed - now defined at the top of the file
 
 # ... keep all other routes exactly the same ...
 # ... rest of the routes stay the same ...
@@ -239,7 +257,7 @@ class DocumentGenerationResponse(BaseModel):
     document_summary: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
 
-@router.post("/memo/{memo_id}/generate-document", response_model=DocumentGenerationResponse)
+@router.post("/memo/{memo_id}/create-document", response_model=DocumentGenerationResponse)
 async def generate_memo_document(
     memo_id: int,
     current_user: User = Depends(get_current_user),
@@ -258,8 +276,11 @@ async def generate_memo_document(
         if not memo_request:
             raise HTTPException(status_code=404, detail="Memo request not found")
         
-        # Generate Word document
-        document_path = generate_word_document(db, memo_id)
+        # Generate Word document based on memo type
+        if memo_request.memo_type == "short":
+            document_path = generate_short_word_document(db, memo_id)
+        else:
+            document_path = generate_word_document(db, memo_id)
         
         if document_path:
             # Get document summary
@@ -307,7 +328,10 @@ async def download_memo_document(
             raise HTTPException(status_code=404, detail="Memo request not found")
         
         # Generate document if it doesn't exist
-        document_path = generate_word_document(db, memo_id)
+        if memo_request.memo_type == "short":
+            document_path = generate_short_word_document(db, memo_id)
+        else:
+            document_path = generate_word_document(db, memo_id)
         
         if not document_path or not os.path.exists(document_path):
             raise HTTPException(status_code=404, detail="Document not found or generation failed")
