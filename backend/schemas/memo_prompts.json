@@ -31,19 +31,5 @@
   
     "deal_considerations": "Based on the data provided, Evaluate exit considerations (acquisition or IPO prospects), expected time to exit, projected returns (IRR, MOIC, multiples), comparables (public/private), and deal terms (valuation, liquidation preferences, governance rights, pro-rata, tag/drag)."
   
-  },
-
-  "short_memo": {
-    "company_brief": "Write a concise company brief (≈100 words) covering: What the company does, their business model, and if information is available, what they are looking for in the current deal (funding round, amount, use of funds). Keep this factual and direct.",
-    
-    "startup_overview": "Provide a concise startup overview (≈80 words) covering: Product description, business model, and key value proposition. Focus on what makes this company unique and how they generate revenue.",
-    
-    "founder_team": "Summarize the founder team (≈80 words) including: Key founders' backgrounds, relevant experience, previous exits or notable achievements, and any advisors or board members. Highlight what makes this team capable of executing on their vision.",
-    
-    "deal_traction": "Cover deal and traction details (≈80 words) including: Current funding stage, key metrics (revenue, users, growth), notable customers or partnerships, and recent milestones. Include any specific traction that validates the business model.",
-    
-    "competitive_landscape": "Analyze the competitive landscape (≈80 words) including: Main competitors, how the company differentiates, competitive advantages or moats, and market positioning. Be concise but insightful about competitive dynamics.",
-    
-    "remarks": "Provide final remarks and recommendation (≈80 words) including: Key investment highlights, main risks to consider, and overall recommendation (Invest/Pass/More Info needed). Be direct and reasoned in your assessment."
   }
   

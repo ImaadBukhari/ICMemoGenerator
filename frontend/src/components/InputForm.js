@@ -6,7 +6,6 @@ function InputForm({ onGenerate }) {
   const [companyName, setCompanyName] = useState('');
   const [affinityId, setAffinityId] = useState('');
   const [description, setDescription] = useState('');
-  const [memoType, setMemoType] = useState('full'); // 'full' or 'short'
   const [isGenerating, setIsGenerating] = useState(false);
 
   const handleSubmit = async (e) => {
@@ -17,7 +16,7 @@ function InputForm({ onGenerate }) {
     }
 
     setIsGenerating(true);
-    await onGenerate(companyName, affinityId, description.trim(), memoType);
+    await onGenerate(companyName, affinityId, description.trim());
     setIsGenerating(false);
   };
 
@@ -59,38 +58,6 @@ function InputForm({ onGenerate }) {
           <p className="field-hint">
             This helps us find the right company, especially if the name is common or ambiguous.
           </p>
-        </div>
-
-        <div className="form-group">
-          <label className="form-label">Memo Type</label>
-          <div className="memo-type-selection">
-            <label className="memo-type-option">
-              <input 
-                type="radio" 
-                value="full" 
-                checked={memoType === 'full'}
-                onChange={(e) => setMemoType(e.target.value)}
-                disabled={isGenerating}
-              />
-              <span className="memo-type-label">
-                <strong>Full Memo</strong>
-                <small>Comprehensive 15-section analysis</small>
-              </span>
-            </label>
-            <label className="memo-type-option">
-              <input 
-                type="radio" 
-                value="short" 
-                checked={memoType === 'short'}
-                onChange={(e) => setMemoType(e.target.value)}
-                disabled={isGenerating}
-              />
-              <span className="memo-type-label">
-                <strong>1-Page Summary</strong>
-                <small>Concise initial IC memo</small>
-              </span>
-            </label>
-          </div>
         </div>
 
         <div className="form-group">

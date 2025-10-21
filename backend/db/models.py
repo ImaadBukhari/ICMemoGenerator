@@ -72,7 +72,6 @@ class MemoRequest(Base):
     company_name = Column(String)
     drive_link = Column(Text)       # link to final Google Doc
     sources_id = Column(Integer, ForeignKey("sources.id"))
-    memo_type = Column(String, default="full")  # "full" or "short"
     status = Column(String)         # "pending", "success", "failed"
     error_log = Column(Text)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
