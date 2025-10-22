@@ -12,19 +12,15 @@ function MemoGenerator() {
   const [currentSection, setCurrentSection] = useState('');
   const [progress, setProgress] = useState(0);
   const [completedSections, setCompletedSections] = useState(0);
-  const [totalSections, setTotalSections] = useState(15);
+  const [totalSections] = useState(15);
 
   const pollingIntervalRef = useRef(null);
 
-  const handleGenerate = async (companyName, affinityId, description, memoType = 'full') => {
+  const handleGenerate = async (companyName, affinityId, description) => {
     setStage('loading');
     setCurrentSection('Gathering company data...');
     setProgress(0);
     setCompletedSections(0);
-    
-    // Set total sections based on memo type
-    const totalSectionsCount = memoType === 'short' ? 6 : 15;
-    setTotalSections(totalSectionsCount);
 
     try {
       // 1️⃣ Gather company data
@@ -37,15 +33,14 @@ function MemoGenerator() {
       setCurrentSection('Starting memo generation...');
 
       // 2️⃣ Start memo generation
-      const { data: memoResult } = await api.post('/memo/start-generation', {
+      const { data: memoResult } = await api.post('/memo/generate', {
         source_id: gatherData.source_id,
-        memo_type: memoType,
       });
 
       const memoId = memoResult.memo_request_id;
 
       // 3️⃣ Begin polling progress
-      startPolling(memoId, companyName, memoType);
+      startPolling(memoId, companyName);
 
     } catch (error) {
       console.error('Error:', error);
@@ -55,7 +50,7 @@ function MemoGenerator() {
   };
 
   // Poll memo progress
-  const startPolling = (memoId, companyName, memoType = 'full') => {
+  const startPolling = (memoId, companyName) => {
     pollingIntervalRef.current = setInterval(async () => {
       try {
         const { data } = await api.get(`/memo/${memoId}/sections`);
@@ -67,10 +62,7 @@ function MemoGenerator() {
         setCompletedSections(completed);
         setProgress(progressPercent);
 
-        const expectedSections = memoType === 'short' ? [
-          'company_brief', 'startup_overview', 'founder_team',
-          'deal_traction', 'competitive_landscape', 'remarks'
-        ] : [
+        const expectedSections = [
           'executive_summary', 'company_snapshot', 'people', 'market_opportunity',
           'competitive_landscape', 'product', 'financial', 'traction_validation',
           'deal_considerations', 'assessment_people', 'assessment_market_opportunity',
@@ -111,7 +103,6 @@ function MemoGenerator() {
 
   const formatSectionName = (sectionKey) => {
     const sectionNames = {
-      // Full memo sections
       executive_summary: 'Executive Summary',
       company_snapshot: 'Company Snapshot',
       people: 'Team & Leadership',
@@ -127,13 +118,6 @@ function MemoGenerator() {
       assessment_financials: 'Scorecard: Financial',
       assessment_traction_validation: 'Scorecard: Traction',
       assessment_deal_considerations: 'Scorecard: Deal',
-      // Short memo sections
-      company_brief: 'Company Brief',
-      startup_overview: 'Startup Overview',
-      founder_team: 'Founder Team',
-      deal_traction: 'Deal & Traction',
-      competitive_landscape: 'Competitive Landscape',
-      remarks: 'Remarks',
     };
 
     return sectionNames[sectionKey] || sectionKey

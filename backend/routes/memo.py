@@ -7,18 +7,29 @@ import os
 
 from backend.db.models import User, MemoRequest, MemoSection
 from backend.database import get_db, SessionLocal  # ADD SessionLocal import
-from backend.mock_auth import get_current_user
+from backend.auth import get_current_user
 from backend.services.data_gathering_service import get_stored_company_data
-from backend.services.memo_generation_service import generate_comprehensive_memo, generate_short_memo, compile_final_memo, compile_short_memo
+from backend.services.memo_generation_service import generate_comprehensive_memo, compile_final_memo
 from backend.services.document_service import generate_word_document, get_document_summary
 
 #This file handles memo generation and document creation
 
+from fastapi import APIRouter, Depends
+from backend.auth.firebase_auth import verify_firebase_token
+
 router = APIRouter()
+
+@router.post("/data/gather")
+async def gather_data(
+    payload: dict,
+    user=Depends(verify_firebase_token)
+):
+    # You can now access user info
+    user_uid = user.get("uid")
+    print(f"Authenticated request from UID: {user_uid}")
 
 class MemoGenerationRequest(BaseModel):
     source_id: int
-    memo_type: str = "full"  # "full" or "short"
 
 class SectionResult(BaseModel):
     section_name: str
@@ -34,38 +45,33 @@ class MemoResponse(BaseModel):
     status: str
     message: Optional[str] = None
 
-def generate_memo_background(company_data: Dict, memo_request_id: int, memo_type: str = "full"):
+def generate_memo_background(company_data: Dict, memo_request_id: int):
     """Background task to generate memo sections"""
-    print(f"Starting background generation for memo {memo_request_id}, type: {memo_type}")
     # CREATE A NEW DATABASE SESSION FOR THIS BACKGROUND TASK
     db = SessionLocal()
     try:
-        print(f"Company data keys: {list(company_data.keys())}")
-        if memo_type == "short":
-            print("Calling generate_short_memo...")
-            generation_result = generate_short_memo(
-                company_data, 
-                db, 
-                memo_request_id
-            )
-        else:
-            print("Calling generate_comprehensive_memo...")
-            generation_result = generate_comprehensive_memo(
-                company_data, 
-                db, 
-                memo_request_id
-            )
+        generation_result = generate_comprehensive_memo(
+            company_data, 
+            db, 
+            memo_request_id
+        )
         
-        print(f"Generation result: {generation_result}")
-        print(f"Memo generation completed with status: {generation_result['status']}")
+        # Update memo request status
+        memo_request = db.query(MemoRequest).filter(MemoRequest.id == memo_request_id).first()
+        if memo_request:
+            memo_request.status = generation_result["status"]
+            db.commit()
     except Exception as e:
         print(f"Background generation error: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        memo_request = db.query(MemoRequest).filter(MemoRequest.id == memo_request_id).first()
+        if memo_request:
+            memo_request.status = "failed"
+            memo_request.error_log = str(e)
+            db.commit()
     finally:
         db.close()  # ALWAYS CLOSE THE SESSION
 
-@router.post("/memo/start-generation")
+@router.post("/memo/generate")
 async def generate_memo(
     request: MemoGenerationRequest,
     background_tasks: BackgroundTasks,
@@ -84,7 +90,6 @@ async def generate_memo(
             user_id=current_user.id,
             company_name=company_data["company_name"],
             sources_id=request.source_id,
-            memo_type=request.memo_type,
             status="in_progress"
         )
         db.add(memo_request)
@@ -95,8 +100,7 @@ async def generate_memo(
         background_tasks.add_task(
             generate_memo_background,
             company_data,
-            memo_request.id,  # Only pass the ID, not the session
-            request.memo_type  # Pass memo type
+            memo_request.id  # Only pass the ID, not the session
         )
         
         # Return immediately with memo_request_id
@@ -246,9 +250,9 @@ async def generate_memo_document(
     """
     try:
         # Verify memo belongs to user
-        memo_request = db.query(MockMemoRequest).filter(
-            MockMemoRequest.id == memo_id,
-            MockMemoRequest.user_id == current_user.id
+        memo_request = db.query(MemoRequest).filter(
+            MemoRequest.id == memo_id,
+            MemoRequest.user_id == current_user.id
         ).first()
         
         if not memo_request:
@@ -294,9 +298,9 @@ async def download_memo_document(
     """
     try:
         # Verify memo belongs to user
-        memo_request = db.query(MockMemoRequest).filter(
-            MockMemoRequest.id == memo_id,
-            MockMemoRequest.user_id == current_user.id
+        memo_request = db.query(MemoRequest).filter(
+            MemoRequest.id == memo_id,
+            MemoRequest.user_id == current_user.id
         ).first()
         
         if not memo_request:

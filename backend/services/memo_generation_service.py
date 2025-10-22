@@ -2,7 +2,7 @@ import json
 import os
 from typing import Dict, Any, List, Optional
 from sqlalchemy.orm import Session
-from backend.db.models import MemoRequest, MemoSection, Source
+from backend.db.models import MemoRequest, MemoSection, Source  # ADD Source
 from backend.services.gpt_service import generate_text
 from backend.services.rag_service import build_company_knowledge_base, retrieve_context_for_section
 import re
@@ -13,13 +13,6 @@ def load_memo_prompts() -> Dict[str, Any]:
     prompts_path = os.path.join(os.path.dirname(__file__), '..', 'schemas', 'memo_prompts.json')
     with open(prompts_path, 'r') as f:
         return json.load(f)
-
-def load_short_memo_prompts() -> Dict[str, Any]:
-    """Load short memo prompts from JSON file"""
-    prompts_path = os.path.join(os.path.dirname(__file__), '..', 'schemas', 'memo_prompts.json')
-    with open(prompts_path, 'r') as f:
-        data = json.load(f)
-        return data.get("short_memo", {})
 
 def get_stored_company_data(db: Session, source_id: int) -> Dict[str, Any]:
     """Retrieve stored company data for memo generation"""
@@ -396,129 +389,3 @@ def compile_final_memo(db: Session, memo_request_id: int) -> str:
             memo_parts.append(f"[{idx}] {source}")
 
     return "\n\n".join(memo_parts)
-
-def generate_short_memo(
-    company_data: Dict[str, Any],
-    db: Session,
-    memo_request_id: int
-) -> Dict[str, Any]:
-    """Generate a 1-page memo with 6 key sections"""
-    try:
-        # Build knowledge base
-        knowledge_base, all_sources = build_company_knowledge_base(company_data)
-        
-        # Load short memo prompts
-        short_prompts = load_short_memo_prompts()
-        
-        # Define short memo sections
-        short_sections = [
-            "company_brief",
-            "startup_overview", 
-            "founder_team",
-            "deal_traction",
-            "competitive_landscape",
-            "remarks"
-        ]
-        
-        results = {
-            "status": "completed",
-            "sections_completed": [],
-            "sections_failed": [],
-            "sources_used": list(all_sources)
-        }
-        
-        # Generate each section
-        for section_name in short_sections:
-            try:
-                prompt = short_prompts.get(section_name, "")
-                if not prompt:
-                    results["sections_failed"].append({
-                        "section": section_name,
-                        "error": "No prompt found"
-                    })
-                    continue
-                
-                # Get context for this section
-                context_data = retrieve_context_for_section(section_name, knowledge_base)
-                
-                # Generate content
-                content = generate_memo_section_with_rag(
-                    prompt, context_data, section_name
-                )
-                
-                # Save to database
-                memo_section = MemoSection(
-                    memo_request_id=memo_request_id,
-                    section_name=section_name,
-                    content=content,
-                    data_sources=context_data.get('sources', []),
-                    status="completed"
-                )
-                db.add(memo_section)
-                db.commit()
-                
-                results["sections_completed"].append(section_name)
-                
-            except Exception as e:
-                print(f"Error generating {section_name}: {str(e)}")
-                results["sections_failed"].append({
-                    "section": section_name,
-                    "error": str(e)
-                })
-        
-        return results
-        
-    except Exception as e:
-        return {
-            "status": "failed",
-            "error": str(e),
-            "sections_completed": [],
-            "sections_failed": []
-        }
-
-def compile_short_memo(db: Session, memo_request_id: int) -> str:
-    """Compile all completed short memo sections into a final memo with global citations"""
-    try:
-        # Get all sections for this memo
-        sections = db.query(MemoSection).filter(
-            MemoSection.memo_request_id == memo_request_id,
-            MemoSection.status == "completed"
-        ).all()
-        
-        if not sections:
-            return "No completed sections found."
-        
-        # Define section order for short memo
-        section_order = [
-            "company_brief",
-            "startup_overview", 
-            "founder_team",
-            "deal_traction",
-            "competitive_landscape",
-            "remarks"
-        ]
-        
-        # Collect all sources
-        all_sources = set()
-        memo_parts = []
-        
-        # Build body of the memo
-        for section_name in section_order:
-            section = next((s for s in sections if s.section_name == section_name), None)
-            if section and section.content:
-                title = section_name.replace("_", " ").title()
-                memo_parts.append(f"## {title}\n\n{section.content.strip()}")
-                if section.data_sources:
-                    all_sources.update(section.data_sources)
-        
-        # Build Sources section
-        if all_sources:
-            memo_parts.append("\n## Sources\n")
-            sorted_sources = sorted(list(all_sources))
-            for idx, source in enumerate(sorted_sources, 1):
-                memo_parts.append(f"[{idx}] {source}")
-        
-        return "\n\n".join(memo_parts)
-        
-    except Exception as e:
-        return f"Error compiling memo: {str(e)}"

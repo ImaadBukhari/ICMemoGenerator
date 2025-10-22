@@ -2,8 +2,8 @@
 import axios from "axios";
 import { getAuth } from "firebase/auth";
 
-//const BASE_URL = "https://icmemo-backend-211323749133.us-central1.run.app/api"; 
-const BASE_URL = 'http://127.0.0.1:8000/api'
+const BASE_URL = "https://icmemo-backend-211323749133.us-central1.run.app/api"; 
+
 // Create Axios instance
 const api = axios.create({
   baseURL: BASE_URL,
