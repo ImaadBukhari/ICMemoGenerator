@@ -1,23 +1,40 @@
-// src/api.js
-import axios from "axios";
-import { getAuth } from "firebase/auth";
+import axios from 'axios';
 
-const BASE_URL = "https://icmemo-backend-211323749133.us-central1.run.app/api"; 
+const API_BASE_URL = 'http://127.0.0.1:8000/api';
 
-// Create Axios instance
+// Get token from localStorage
+const getAuthToken = () => {
+  return localStorage.getItem('authToken');
+};
+
 const api = axios.create({
-  baseURL: BASE_URL,
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
 });
 
-// Automatically attach Firebase ID token
-api.interceptors.request.use(async (config) => {
-  const auth = getAuth();
-  const user = auth.currentUser;
-  if (user) {
-    const token = await user.getIdToken();
+// Add auth token to requests
+api.interceptors.request.use((config) => {
+  const token = getAuthToken();
+  if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 });
 
-export default api; 
+// Handle auth errors
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      // Token expired or invalid
+      localStorage.removeItem('authToken');
+      localStorage.removeItem('user');
+      window.location.reload();
+    }
+    return Promise.reject(error);
+  }
+);
+
+export default api;

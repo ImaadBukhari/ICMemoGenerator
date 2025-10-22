@@ -6,7 +6,7 @@ from typing import Optional, Dict, Any, List
 import os
 
 from backend.db.models import User, MemoRequest, MemoSection
-from backend.database import get_db, SessionLocal  # ADD SessionLocal import
+from backend.database import get_db, SessionLocal
 from backend.auth import get_current_user
 from backend.services.data_gathering_service import get_stored_company_data
 from backend.services.memo_generation_service import generate_comprehensive_memo, compile_final_memo
@@ -14,22 +14,11 @@ from backend.services.document_service import generate_word_document, get_docume
 
 #This file handles memo generation and document creation
 
-from fastapi import APIRouter, Depends
-from backend.auth.firebase_auth import verify_firebase_token
-
 router = APIRouter()
-
-@router.post("/data/gather")
-async def gather_data(
-    payload: dict,
-    user=Depends(verify_firebase_token)
-):
-    # You can now access user info
-    user_uid = user.get("uid")
-    print(f"Authenticated request from UID: {user_uid}")
 
 class MemoGenerationRequest(BaseModel):
     source_id: int
+    memo_type: str = "full"  # "full" or "short"
 
 class SectionResult(BaseModel):
     section_name: str
@@ -45,24 +34,38 @@ class MemoResponse(BaseModel):
     status: str
     message: Optional[str] = None
 
-def generate_memo_background(company_data: Dict, memo_request_id: int):
+def generate_memo_background(company_data: Dict, memo_request_id: int, memo_type: str = "full"):
     """Background task to generate memo sections"""
-    # CREATE A NEW DATABASE SESSION FOR THIS BACKGROUND TASK
+    print(f"Starting background generation for memo {memo_request_id}, type: {memo_type}")
     db = SessionLocal()
     try:
-        generation_result = generate_comprehensive_memo(
-            company_data, 
-            db, 
-            memo_request_id
-        )
+        if memo_type == "short":
+            from backend.services.memo_generation_service import generate_short_memo
+            generation_result = generate_short_memo(
+                company_data, 
+                db, 
+                memo_request_id
+            )
+        else:
+            generation_result = generate_comprehensive_memo(
+                company_data, 
+                db, 
+                memo_request_id
+            )
+        
+        print(f"Generation result: {generation_result}")
         
         # Update memo request status
         memo_request = db.query(MemoRequest).filter(MemoRequest.id == memo_request_id).first()
         if memo_request:
             memo_request.status = generation_result["status"]
             db.commit()
+            
+        print(f"Memo generation completed with status: {generation_result['status']}")
     except Exception as e:
         print(f"Background generation error: {str(e)}")
+        import traceback
+        traceback.print_exc()
         memo_request = db.query(MemoRequest).filter(MemoRequest.id == memo_request_id).first()
         if memo_request:
             memo_request.status = "failed"
@@ -90,6 +93,7 @@ async def generate_memo(
             user_id=current_user.id,
             company_name=company_data["company_name"],
             sources_id=request.source_id,
+            memo_type=request.memo_type,
             status="in_progress"
         )
         db.add(memo_request)
@@ -100,7 +104,8 @@ async def generate_memo(
         background_tasks.add_task(
             generate_memo_background,
             company_data,
-            memo_request.id  # Only pass the ID, not the session
+            memo_request.id,  # Only pass the ID, not the session
+            request.memo_type  # Pass memo type
         )
         
         # Return immediately with memo_request_id
