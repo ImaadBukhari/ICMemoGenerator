@@ -1,35 +1,44 @@
 {
-    "executive_summary": "Write a concise executive summary (≈300 words) for a venture capital investment memo.\n\nStructure your output as:\n\nProblem Statement: The market inefficiency or pain point the company addresses.\n\nSolution Overview: The company's core product and how it solves the problem.\n\nProduct Proof: Quantitative results, demo details, or adoption metrics.\n\nDeal Terms: Include stage, valuation, round size, ARR, use of funds, and other investors.\n\nInvestment Thesis: Three concise, data-supported reasons the company is compelling.\n\nKey Risks: Two to three core risks or uncertainties.\n\nUse short paragraphs, avoid generic praise, and write as if for an internal Wyld IC deck.",
+  "executive_summary": "Write a concise executive summary (≈300 words) for a venture capital investment memo.\n\nStructure your output as:\n\nProblem Statement: The market inefficiency or pain point the company addresses.\n\nSolution Overview: The company's core product and how it solves the problem.\n\nProduct Proof: Quantitative results, demo details, or adoption metrics.\n\nDeal Terms: Include stage, valuation, round size, ARR, use of funds, and other investors.\n\nInvestment Thesis: Three concise, data-supported reasons the company is compelling.\n\nKey Risks: Two to three core risks or uncertainties.\n\nUse short paragraphs, avoid generic praise, and write as if for an internal Wyld IC deck.",
+
+  "assessment_summary": {
+  "people": "Based on the data provided, Assess the founding team and leadership. Justify the rating by considering pedigree, technical depth, execution ability, leadership track record, and the presence of at least one top 1% technical founder. Summarize team size, structure, advisors, and existing investors. End with a 1–10 rating for People, with justification.",
   
-    "assessment_summary": {
-    "people": "Based on the data provided, Assess the founding team and leadership. Justify the rating by considering pedigree, technical depth, execution ability, leadership track record, and the presence of at least one top 1% technical founder. Summarize team size, structure, advisors, and existing investors. End with a 1–10 rating for People, with justification.",
-    
-    "market_opportunity": "Based on the data provided, Assess the market opportunity. Justify the rating by analyzing the market size (TAM/SAM/SOM), growth trajectory (historical and projected), timing, regulatory tailwinds/barriers, and disruption trends. Conclude with a 1–10 rating for Market Opportunity, with reasoning.",
-    
-    "product": "Based on the data provided, Assess the product. Justify the rating by considering product differentiation, defensibility (IP, data, network effects), scalability potential, switching costs, and current adoption. Include risks around product-market fit. Conclude with a 1–10 rating for Product.",
-    
-    "financials": "Based on the data provided, Assess the financial health and trajectory. Justify the rating by analyzing revenue quality (recurring %, ARR growth, gross/net retention), customer economics (LTV/CAC, CAC payback), path to profitability, and capital efficiency (burn rate, runway). Conclude with a 1–10 rating for Financials.",
-    
-    "traction_validation": "Based on the data provided, Assess traction and validation. Justify the rating by analyzing customer adoption, cornerstone partnerships, customer concentration risks, and market validation. Conclude with a 1–10 rating for Traction & Validation.",
-    
-    "deal_considerations": "Based on the data provided, Assess deal considerations. Justify the rating by analyzing exit opportunities (M&A or IPO), expected returns (IRR, MOIC), valuation multiples, and deal terms (preferences, governance, pro-rata). Conclude with a 1–10 rating for Deal Considerations."
+  "market_opportunity": "Based on the data provided, Assess the market opportunity. Justify the rating by analyzing the market size (TAM/SAM/SOM), growth trajectory (historical and projected), timing, regulatory tailwinds/barriers, and disruption trends. Conclude with a 1–10 rating for Market Opportunity, with reasoning.",
+  
+  "product": "Based on the data provided, Assess the product. Justify the rating by considering product differentiation, defensibility (IP, data, network effects), scalability potential, switching costs, and current adoption. Include risks around product-market fit. Conclude with a 1–10 rating for Product.",
+  
+  "financials": "Based on the data provided, Assess the financials. Justify the rating by analyzing revenue quality (ARR, gross/net retention, ARPU, gross margin, % recurring revenue), growth metrics (LTV/CAC, CAC payback, pipeline conversion, product mix), path to profitability (unit economics, DAU/MAU, breakeven timeline), and capital efficiency (burn rate, cash balance, runway). Conclude with a 1–10 rating for Financials.",
+  
+  "traction_validation": "Based on the data provided, Assess the traction and validation. Justify the rating by evaluating customer adoption (number of customers, retention, growth rate), key partnerships and use cases, notable customer logos or case studies, customer concentration or dependency risks, press coverage, investor validation, or award signals. Conclude with a 1–10 rating for Traction & Validation.",
+  
+  "deal_considerations": "Based on the data provided, Evaluate exit considerations (acquisition or IPO prospects), expected time to exit, projected returns (IRR, MOIC, multiples), comparables (public/private), and deal terms (valuation, liquidation preferences, governance rights, pro-rata, tag/drag)."
   },
-  
-    "company_snapshot": "Based on the data provided, Provide a short company snapshot including company background, HQ location, and any other locations. Keep this very brief, just a few bullets. ",
-  
-    "people": "Summarize the founders and management team (≈300 words). For each, include: Name, title, education, and notable past roles or exits. Skills or domain expertise tied directly to the company’s moat. Evidence of leadership or execution capability. Known advisors or board members. ",
-  
-    "market_opportunity": "Draft an Investment Thesis and Market Context section. Structure: Macro Tailwinds: Quantify TAM, SAM, SOM, growth rates, and major structural shifts. Timing: Why this market is being disrupted now (regulation, technology, or behavior). Beachhead Market: Specific target segment(s) and adoption drivers. Barriers to Entry: Switching costs, incumbents, and new entrants. Implications: 2–3 sentences connecting Nash’s opportunity to investor returns. Use numbers, trends, and comparisons to show depth. Avoid listing facts without context.",
-  
-    "competitive_landscape": "Map out the competitive environment. Include: 4–6 named competitors (year founded, funding, employees, and positioning). Distinguish between direct competitors, adjacent enablers, and potential entrants. Summarize each in a table-style or bullet format. Then, articulate Nash’s relative advantage (cost, technology, integrations, or relationships). End with a short paragraph assessing competitive risk and what could erode Nash’s edge.",
-  
-    "product": "Describe the product and technology (≈300–400 words). Cover: Key features and use cases. Technology stack or AI/IP differentiators. Target customers and pricing model. Data advantages or network effects. Scalability potential and customer switching costs. End with 2–3 bullet points summarizing what makes the product defensible.",
-  
-    "financial": "Based on the data provided, Summarize the company's financials: revenue quality (ARR, gross/net retention, ARPU, gross margin, % recurring revenue), growth metrics (LTV/CAC, CAC payback, pipeline conversion, product mix), path to profitability (unit economics, DAU/MAU, breakeven timeline), and capital efficiency (burn rate, cash balance, runway).",
-  
-    "traction_validation": "Outline evidence of product-market fit and customer validation. Include: Customer adoption (number of customers, retention, growth rate). Key partnerships and use cases. Notable customer logos or case studies. Customer concentration or dependency risks. Press coverage, investor validation, or award signals. End with 3–4 sentences summarizing how these signals de-risk the investment.",
-  
-    "deal_considerations": "Based on the data provided, Evaluate exit considerations (acquisition or IPO prospects), expected time to exit, projected returns (IRR, MOIC, multiples), comparables (public/private), and deal terms (valuation, liquidation preferences, governance rights, pro-rata, tag/drag)."
-  
+
+  "company_snapshot": "Based on the data provided, Provide a comprehensive company snapshot including: Company name, stage, industry, headquarters, founding date, employee count, website, and key contact information. Include a brief description of what the company does and their core value proposition.",
+
+  "people": "Based on the data provided, Detail the founding team and leadership structure. Include: Founder backgrounds, relevant experience, previous exits or notable achievements, key team members, advisors, and existing investors. Highlight what makes this team capable of executing on their vision.",
+
+  "market_opportunity": "Based on the data provided, Analyze the market opportunity and timing. Include: Market size (TAM/SAM/SOM), growth trajectory, timing considerations, regulatory tailwinds or barriers, and disruption trends. Explain why now is the right time for this opportunity.",
+
+  "competitive_landscape": "Based on the data provided, Map the competitive landscape and differentiation. Include: Direct and indirect competitors, competitive advantages, market positioning, and how the company plans to defend its market position.",
+
+  "product": "Based on the data provided, Describe the product and technology. Include: Core product features, technology stack, scalability, defensibility (IP, data, network effects), and product roadmap. Highlight what makes the product unique and defensible.",
+
+  "financial": "Based on the data provided, Summarize the company's financials: revenue quality (ARR, gross/net retention, ARPU, gross margin, % recurring revenue), growth metrics (LTV/CAC, CAC payback, pipeline conversion, product mix), path to profitability (unit economics, DAU/MAU, breakeven timeline), and capital efficiency (burn rate, cash balance, runway).",
+
+  "traction_validation": "Outline evidence of product-market fit and customer validation. Include: Customer adoption (number of customers, retention, growth rate). Key partnerships and use cases. Notable customer logos or case studies. Customer concentration or dependency risks. Press coverage, investor validation, or award signals. End with 3–4 sentences summarizing how these signals de-risk the investment.",
+
+  "deal_considerations": "Based on the data provided, Evaluate exit considerations (acquisition or IPO prospects), expected time to exit, projected returns (IRR, MOIC, multiples), comparables (public/private), and deal terms (valuation, liquidation preferences, governance rights, pro-rata, tag/drag).",
+
+  "short_memo": {
+      "problem": "Identify the core market problem or inefficiency that this company addresses (≈40 words). Focus on the specific pain point, market gap, or inefficiency that creates the opportunity. Write in short, direct sentences without titles or headers.",
+      "solution": "Describe the company's core solution and how it addresses the identified problem (≈40 words). Focus on the key product/service and its unique approach to solving the problem. Write in short, direct sentences without titles or headers.",
+      "company_brief": "Write a concise company brief (≈100 words) covering: What the company does, their business model, and if information is available, what they are looking for in the current deal (funding round, amount, use of funds). Keep this factual and direct. Use bullet points and short paragraphs. Do not include titles like 'Company Brief' or subheadings.",
+      "startup_overview": "Provide a concise startup overview (≈80 words) covering: Product description, business model, and key value proposition. Focus on what makes this company unique and how they generate revenue. Use bullet points and short paragraphs. Do not include titles or subheadings.",
+      "founder_team": "Summarize the founder team (≈80 words) including: Key founders' backgrounds, relevant experience, previous exits or notable achievements, and any advisors or board members. Highlight what makes this team capable of executing on their vision. Use bullet points and short paragraphs. Do not include titles or subheadings.",
+      "deal_traction": "Cover deal and traction details (≈80 words) including: Current funding stage, key metrics (revenue, users, growth), notable customers or partnerships, and recent milestones. Include any specific traction that validates the business model. Use bullet points and short paragraphs. Do not include titles or subheadings.",
+      "competitive_landscape": "Analyze the competitive landscape (≈80 words) including: Main competitors, how the company differentiates, competitive advantages or moats, and market positioning. Be concise but insightful about competitive dynamics. Use bullet points and short paragraphs. Do not include titles or subheadings.",
+      "remarks": "Provide final remarks and recommendation (≈80 words) including: Key investment highlights, main risks to consider, and overall recommendation (Invest/Pass/More Info needed). Be direct and reasoned in your assessment. Use bullet points and short paragraphs. Do not include titles or subheadings."
   }
-  
+}

@@ -828,3 +828,198 @@ def get_document_summary(db: Session, memo_request_id: int) -> Dict[str, Any]:
             for s in sections
         ]
     }
+
+def generate_short_word_document(db: Session, memo_request_id: int) -> Optional[str]:
+    """Generate a formatted Word document for short memo sections"""
+    
+    try:
+        print(f"Starting short document generation for memo {memo_request_id}")
+        
+        # Check if python-docx is available
+        try:
+            from docx import Document
+            from docx.shared import Pt, Inches, RGBColor
+            from docx.enum.text import WD_ALIGN_PARAGRAPH
+            from docx.oxml import OxmlElement
+            from docx.oxml.ns import qn
+            print("✅ python-docx is available")
+        except ImportError:
+            print("❌ python-docx not available, falling back to text generation")
+            return None
+        
+        # Get memo request
+        memo_request = db.query(MemoRequest).filter(MemoRequest.id == memo_request_id).first()
+        if not memo_request:
+            print(f"❌ Memo request {memo_request_id} not found")
+            return None
+        
+        # Get all sections for this memo
+        sections = db.query(MemoSection).filter(
+            MemoSection.memo_request_id == memo_request_id,
+            MemoSection.status == "completed"
+        ).all()
+        
+        print(f"Found {len(sections)} completed sections for memo {memo_request_id}")
+        for section in sections:
+            print(f"  - {section.section_name}: {len(section.content) if section.content else 0} characters")
+            if section.section_name == "competitive_landscape":
+                print(f"    Competitive landscape content preview: {section.content[:100]}...")
+        
+        if not sections:
+            print(f"❌ No completed sections found for memo {memo_request_id}")
+            return None
+        
+        # Create document
+        doc = Document()
+        
+        # Add title
+        title = doc.add_heading(f'{memo_request.company_name}', 0)
+        title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        
+        # Add subtitle
+        subtitle = doc.add_heading('Series [X] Initial IC Memo', level=1)
+        subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        
+        # Add deal team section
+        deal_team = doc.add_heading('Deal team:', level=2)
+        
+        # Add problem/solution table
+        table = doc.add_table(rows=2, cols=2)
+        table.style = 'Table Grid'
+        
+        # Row 1: Problem (header + content)
+        problem_header_cell = table.rows[0].cells[0]
+        problem_header_cell.text = 'Problem:'
+        problem_content_cell = table.rows[0].cells[1]
+        
+        # Row 2: Solution (header + content)  
+        solution_header_cell = table.rows[1].cells[0]
+        solution_header_cell.text = 'Solution:'
+        solution_content_cell = table.rows[1].cells[1]
+        
+        # Style header cells (left column)
+        for cell in [problem_header_cell, solution_header_cell]:
+            cell.paragraphs[0].runs[0].font.bold = True
+            cell.paragraphs[0].runs[0].font.size = Pt(12)
+        
+        # Get problem and solution content from sections
+        problem_section = next((s for s in sections if s.section_name == "problem"), None)
+        solution_section = next((s for s in sections if s.section_name == "solution"), None)
+        
+        problem_text = problem_section.content if problem_section and problem_section.content else 'Problem not identified'
+        solution_text = solution_section.content if solution_section and solution_section.content else 'Solution not described'
+        
+        # Add content to the appropriate cells with proper formatting
+        # Clear existing content and add formatted text
+        problem_content_cell.text = ""
+        solution_content_cell.text = ""
+        
+        # Add formatted text to problem cell
+        problem_para = problem_content_cell.paragraphs[0]
+        add_formatted_text_to_paragraph(problem_para, problem_text, 'Bangla Sangam MN', 10)
+        
+        # Add formatted text to solution cell  
+        solution_para = solution_content_cell.paragraphs[0]
+        add_formatted_text_to_paragraph(solution_para, solution_text, 'Bangla Sangam MN', 10)
+        
+        # Style the problem header cell (left column) with light green background
+        problem_header_cell._tc.get_or_add_tcPr().append(OxmlElement('w:shd'))
+        problem_header_cell._tc.get_or_add_tcPr().find(qn('w:shd')).set(qn('w:val'), 'clear')
+        problem_header_cell._tc.get_or_add_tcPr().find(qn('w:shd')).set(qn('w:color'), 'auto')
+        problem_header_cell._tc.get_or_add_tcPr().find(qn('w:shd')).set(qn('w:fill'), 'a6ddce')  # Light green #a6ddce
+        
+        # Style the solution header cell (left column) with light green background
+        solution_header_cell._tc.get_or_add_tcPr().append(OxmlElement('w:shd'))
+        solution_header_cell._tc.get_or_add_tcPr().find(qn('w:shd')).set(qn('w:val'), 'clear')
+        solution_header_cell._tc.get_or_add_tcPr().find(qn('w:shd')).set(qn('w:color'), 'auto')
+        solution_header_cell._tc.get_or_add_tcPr().find(qn('w:shd')).set(qn('w:fill'), 'a6ddce')  # Light green #a6ddce
+        
+        # Add spacing after table
+        doc.add_paragraph()
+        
+        # Add company brief section first
+        company_brief_section = next((s for s in sections if s.section_name == "company_brief"), None)
+        if company_brief_section and company_brief_section.content:
+            # Add company brief heading
+            brief_heading = doc.add_heading('Company Brief', level=2)
+            brief_heading.alignment = WD_ALIGN_PARAGRAPH.LEFT
+            
+            # Add company brief content
+            paragraphs = company_brief_section.content.split('\n\n')
+            for para_text in paragraphs:
+                if para_text.strip():
+                    para = doc.add_paragraph(para_text.strip())
+                    para.paragraph_format.space_after = Pt(6)
+            
+            # Add spacing
+            doc.add_paragraph()
+        
+        # Add content sections as bullet points with proper formatting (no title)
+        section_order = [
+            "startup_overview", "founder_team", "deal_traction", 
+            "competitive_landscape", "remarks"
+        ]
+        
+        for section_name in section_order:
+            section = next((s for s in sections if s.section_name == section_name), None)
+            print(f"Processing section: {section_name}, found: {section is not None}")
+            if section and section.content:
+                print(f"Adding content for {section_name}: {len(section.content)} characters")
+                
+                # Use the same formatting approach as the full memo service
+                content_text = section.content.strip()
+                
+                # Parse content into blocks with proper formatting
+                formatted_blocks = format_section_content(content_text, section_name)
+                
+                for block in formatted_blocks:
+                    if block['type'] == 'paragraph':
+                        # Add paragraph with proper formatting
+                        para = doc.add_paragraph()
+                        add_formatted_text_to_paragraph(para, block['content'], 'Bangla Sangam MN', 10)
+                        para.paragraph_format.space_after = Pt(6)
+                    
+                    elif block['type'] == 'bullet_list':
+                        # Add bullet list items
+                        for item in block['items']:
+                            bullet_para = doc.add_paragraph()
+                            add_formatted_text_to_paragraph(bullet_para, f"• {item}", 'Bangla Sangam MN', 10)
+                            bullet_para.paragraph_format.space_after = Pt(4)
+                            bullet_para.paragraph_format.left_indent = Inches(0.25)
+                
+                # Add spacing between sections
+                doc.add_paragraph()
+            else:
+                print(f"No content found for section: {section_name}")
+        
+        # Add sources if any
+        all_sources = set()
+        for section in sections:
+            if section.data_sources:
+                all_sources.update(section.data_sources)
+        
+        if all_sources:
+            sources_heading = doc.add_heading('Sources', level=2)
+            sorted_sources = sorted(list(all_sources))
+            for idx, source in enumerate(sorted_sources, 1):
+                source_para = doc.add_paragraph(f'[{idx}] {source}')
+                source_para.paragraph_format.space_after = Pt(6)
+                source_para.paragraph_format.left_indent = Inches(0.25)
+        
+        # Save document
+        filename = f"short_memo_{memo_request_id}_{memo_request.company_name.replace(' ', '_')}.docx"
+        filepath = os.path.join(os.path.dirname(__file__), '..', '..', 'generated_documents', filename)
+        
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        
+        doc.save(filepath)
+        print(f"✅ Short document saved: {filepath}")
+        
+        return filepath
+        
+    except Exception as e:
+        print(f"❌ Error generating short word document: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return None

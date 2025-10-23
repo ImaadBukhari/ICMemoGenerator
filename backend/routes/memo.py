@@ -9,8 +9,8 @@ from backend.db.models import User, MemoRequest, MemoSection
 from backend.database import get_db, SessionLocal
 from backend.auth import get_current_user
 from backend.services.data_gathering_service import get_stored_company_data
-from backend.services.memo_generation_service import generate_comprehensive_memo, compile_final_memo
-from backend.services.document_service import generate_word_document, get_document_summary
+from backend.services.memo_generation_service import generate_comprehensive_memo, generate_short_memo, compile_final_memo, compile_short_memo
+from backend.services.document_service import generate_word_document, generate_short_word_document, get_document_summary
 
 #This file handles memo generation and document creation
 
@@ -89,6 +89,7 @@ async def generate_memo(
             raise HTTPException(status_code=404, detail=company_data["error"])
         
         # Create memo request
+        print(f"Creating memo request with type: {request.memo_type}")
         memo_request = MemoRequest(
             user_id=current_user.id,
             company_name=company_data["company_name"],
@@ -99,6 +100,7 @@ async def generate_memo(
         db.add(memo_request)
         db.commit()
         db.refresh(memo_request)
+        print(f"Created memo request {memo_request.id} with type: {memo_request.memo_type}")
         
         # Start generation in background - DON'T PASS db SESSION
         background_tasks.add_task(
@@ -230,6 +232,7 @@ async def list_user_memos(
             "id": memo.id,
             "company_name": memo.company_name,
             "status": memo.status,
+            "memo_type": memo.memo_type,
             "drive_link": memo.drive_link,
             "created_at": memo.created_at
         }
@@ -263,8 +266,14 @@ async def generate_memo_document(
         if not memo_request:
             raise HTTPException(status_code=404, detail="Memo request not found")
         
-        # Generate Word document
-        document_path = generate_word_document(db, memo_id)
+        # Generate Word document based on memo type
+        print(f"Generating document for memo {memo_id}, type: {memo_request.memo_type}")
+        if memo_request.memo_type == "short":
+            print("Using short memo document generator")
+            document_path = generate_short_word_document(db, memo_id)
+        else:
+            print("Using full memo document generator")
+            document_path = generate_word_document(db, memo_id)
         
         if document_path:
             # Get document summary
@@ -312,7 +321,10 @@ async def download_memo_document(
             raise HTTPException(status_code=404, detail="Memo request not found")
         
         # Generate document if it doesn't exist
-        document_path = generate_word_document(db, memo_id)
+        if memo_request.memo_type == "short":
+            document_path = generate_short_word_document(db, memo_id)
+        else:
+            document_path = generate_word_document(db, memo_id)
         
         if not document_path or not os.path.exists(document_path):
             raise HTTPException(status_code=404, detail="Document not found or generation failed")

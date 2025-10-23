@@ -389,3 +389,167 @@ def compile_final_memo(db: Session, memo_request_id: int) -> str:
             memo_parts.append(f"[{idx}] {source}")
 
     return "\n\n".join(memo_parts)
+
+def load_short_memo_prompts() -> Dict[str, Any]:
+    """Load short memo prompts from JSON file"""
+    prompts_path = os.path.join(os.path.dirname(__file__), '..', 'schemas', 'memo_prompts.json')
+    with open(prompts_path, 'r') as f:
+        data = json.load(f)
+        short_memo_prompts = data.get("short_memo", {})
+        print(f"Loaded short memo prompts: {list(short_memo_prompts.keys())}")
+        return short_memo_prompts
+
+def generate_short_memo(
+    company_data: Dict[str, Any],
+    db: Session,
+    memo_request_id: int
+) -> Dict[str, Any]:
+    """Generate a 1-page memo with 6 key sections"""
+    # Define short memo sections first
+    short_sections = [
+        "problem",
+        "solution",
+        "company_brief",
+        "startup_overview", 
+        "founder_team",
+        "deal_traction",
+        "competitive_landscape",
+        "remarks"
+    ]
+    
+    try:
+        # Get source_id from company_data
+        source_id = company_data.get("source_id")
+        if not source_id:
+            raise ValueError("source_id not found in company_data")
+            
+        # Build knowledge base
+        knowledge_base, all_sources = build_company_knowledge_base(db, source_id)
+        
+        # Load short memo prompts
+        short_prompts = load_short_memo_prompts()
+        
+        results = {
+            "status": "completed",
+            "sections_completed": [],
+            "sections_failed": [],
+            "sources_used": list(all_sources)
+        }
+        
+        # Generate each section
+        for section_name in short_sections:
+            try:
+                prompt = short_prompts.get(section_name, f"Generate content for {section_name}")
+                print(f"Using prompt for {section_name}: {prompt[:50]}...")
+                
+                # Use RAG to get relevant context
+                context_data = retrieve_context_for_section(
+                    section_name,
+                    prompt,
+                    knowledge_base,
+                    all_sources,
+                    company_data.get("company_name", "Unknown Company")
+                )
+                
+                # Generate section content
+                section_result = generate_memo_section_with_rag(
+                    section_name,
+                    prompt,
+                    company_data,
+                    knowledge_base,
+                    all_sources,
+                    db,
+                    memo_request_id
+                )
+                
+                print(f"Generated content for {section_name}: {section_result.get('content', 'NO CONTENT')[:100]}...")
+                
+                # Save to database
+                memo_section = MemoSection(
+                    memo_request_id=memo_request_id,
+                    section_name=section_name,
+                    content=section_result["content"],
+                    data_sources=context_data.get('sources', []),
+                    status="completed"
+                )
+                db.add(memo_section)
+                db.commit()
+                
+                print(f"✅ Saved {section_name} to database")
+                results["sections_completed"].append(section_name)
+                
+            except Exception as e:
+                print(f"Error generating {section_name}: {str(e)}")
+                results["sections_failed"].append(section_name)
+                
+                # Save failed section
+                memo_section = MemoSection(
+                    memo_request_id=memo_request_id,
+                    section_name=section_name,
+                    content="",
+                    status="failed",
+                    error_log=str(e)
+                )
+                db.add(memo_section)
+                db.commit()
+        
+        # Update overall status
+        if results["sections_failed"]:
+            results["status"] = "partial"
+        else:
+            results["status"] = "completed"
+            
+        return results
+        
+    except Exception as e:
+        print(f"Error in generate_short_memo: {str(e)}")
+        return {
+            "status": "failed",
+            "sections_completed": [],
+            "sections_failed": short_sections,
+            "sources_used": [],
+            "error": str(e)
+        }
+
+def compile_short_memo(db: Session, memo_request_id: int) -> str:
+    """Compile all completed short memo sections into a final memo with global citations"""
+    sections = db.query(MemoSection).filter(
+        MemoSection.memo_request_id == memo_request_id,
+        MemoSection.status == "completed"
+    ).all()
+    
+    if not sections:
+        return "No completed sections found."
+    
+    # Define the order for short memo sections
+    section_order = [
+        "company_brief", "startup_overview", "founder_team",
+        "deal_traction", "competitive_landscape", "remarks"
+    ]
+    
+    # Create a mapping of section names to content
+    section_map = {section.section_name: section.content for section in sections}
+    
+    memo_parts = []
+    all_sources = set()
+    
+    # Add sections in the correct order
+    for section_name in section_order:
+        if section_name in section_map:
+            memo_parts.append(f"## {section_name.replace('_', ' ').title()}")
+            memo_parts.append(section_map[section_name])
+            
+            # Collect sources from this section
+            section_obj = next((s for s in sections if s.section_name == section_name), None)
+            if section_obj and section_obj.data_sources:
+                all_sources.update(section_obj.data_sources)
+    
+    # Build Sources section
+    if all_sources:
+        memo_parts.append("\n## Sources\n")
+        # Sort alphabetically for consistent order
+        sorted_sources = sorted(list(all_sources))
+        for idx, source in enumerate(sorted_sources, 1):
+            memo_parts.append(f"[{idx}] {source}")
+    
+    return "\n\n".join(memo_parts)

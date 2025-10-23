@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { GoogleLogin } from '@react-oauth/google';
+import api from '../api';
 import './Login.css';
 
 function Login({ onLogin }) {
@@ -9,26 +10,18 @@ function Login({ onLogin }) {
     setError('');
     
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/auth/google-login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ credential: credentialResponse.credential }),
+      const response = await api.post('/auth/google-login', {
+        credential: credentialResponse.credential
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        // Store the Google credential as the token
-        localStorage.setItem('authToken', credentialResponse.credential);
-        localStorage.setItem('user', JSON.stringify(data.user));
-        onLogin(credentialResponse.credential, data.user);
-      } else {
-        const errorData = await response.json();
-        setError(errorData.detail || 'Login failed');
-      }
+      // axios returns data directly in response.data
+      const data = response.data;
+      // Store the Google credential as the token
+      localStorage.setItem('authToken', credentialResponse.credential);
+      localStorage.setItem('user', JSON.stringify(data.user));
+      onLogin(credentialResponse.credential, data.user);
     } catch (err) {
-      setError('Network error. Please try again.');
+      setError(err.response?.data?.detail || 'Network error. Please try again.');
     }
   };
 
