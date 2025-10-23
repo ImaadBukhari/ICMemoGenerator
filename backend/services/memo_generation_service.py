@@ -70,7 +70,7 @@ def generate_memo_section_with_rag(
             faiss_index,
             chunks,
             company_data.get("company_name", ""),
-            top_k=8
+            top_k=5
         )
         
         # Format Affinity data
@@ -169,6 +169,129 @@ End each section with a short insight summary (2–3 sentences) highlighting key
             "status": "failed",  # FIXED
             "section_name": section_key,
             "error": str(e)  # FIXED
+        }
+
+def generate_short_memo_section_with_rag(
+    section_key: str,
+    prompt: str,
+    company_data: Dict[str, Any],
+    faiss_index,
+    chunks: List[Dict[str, Any]],
+    db: Session,
+    memo_request_id: int
+) -> Dict[str, Any]:
+    """Generate a single short memo section using RAG and GPT with strict length constraints"""
+    
+    try:
+        print(f"Generating short memo section: {section_key}")
+        
+        # Retrieve relevant context using RAG (fewer chunks for short memo)
+        rag_context = retrieve_context_for_section(
+            section_key,
+            prompt,
+            faiss_index,
+            chunks,
+            company_data.get("company_name", ""),
+            top_k=3  # Reduced from 8 for shorter context
+        )
+        
+        # Format Affinity data
+        affinity_section = format_affinity_data(company_data.get("affinity_data", {}))
+        
+        company_name = company_data.get("company_name", "the company")
+        company_description = company_data.get("company_description", "")
+        
+        # Create enhanced prompt with RAG context
+        enhanced_prompt = f"""
+
+COMPANY: {company_name}
+{f"DESCRIPTION: {company_description}" if company_description else ""}
+
+{prompt}
+
+=== CRM DATA (Source: Crunchbase) ===
+{affinity_section}
+
+=== RELEVANT RESEARCH & DATA (Retrieved via semantic search) ===
+{rag_context['context']}
+
+IMPORTANT INSTRUCTIONS:
+1. Base your response ONLY on the data provided above
+2. When citing information, reference the citation numbers [1], [2], etc.
+3. All CRM data should be cited as "Source: Crunchbase"
+4. Prioritize quantitative data, specific metrics, and statistics
+5. If specific information is not available, clearly state that rather than making assumptions
+6. Include specific numbers, percentages, growth rates, and financial figures when mentioned
+
+SOURCES USED: {len(rag_context['sources'])} unique sources found
+"""
+        
+        # Generate content using GPT with short memo constraints
+        system_message = """
+You are a venture capital investment analyst at Wyld VC, drafting a concise 1-page investment memo.
+Write in a neutral, factual tone with extreme brevity.
+Use bullet points and short paragraphs. Do NOT include titles, headers, or subheadings.
+Be direct and factual - avoid marketing language or speculation.
+Focus on key metrics, numbers, and concrete facts.
+Write exactly one short paragraph (40–100 words) as plain text. 
+Do NOT include any titles, headers, company names, or section labels. 
+Begin directly with the content. Example:\n
+\"Addresses inefficiencies in...\" not \"Problem: The company...\".
+"""
+        
+        content = generate_text(
+            enhanced_prompt,
+            system_message,
+            model="gpt-4-turbo-preview",
+            max_tokens=125,  # Much lower for short memo sections
+            temperature=0.2
+        )
+        
+        # Add Crunchbase to sources if Affinity data was used
+        sources = rag_context['sources'].copy()
+        if company_data.get("affinity_data"):
+            sources.append("Crunchbase (via Affinity CRM)")
+        
+        # Store the section with source information
+        memo_section = MemoSection(
+            memo_request_id=memo_request_id,
+            section_name=section_key,
+            content=content,
+            data_sources=sources,  # Include Crunchbase
+            status="completed"
+        )
+        
+        db.add(memo_section)
+        db.commit()
+        db.refresh(memo_section)
+        
+        print(f"✅ Short memo section '{section_key}' generated successfully with {len(sources)} sources")
+        
+        return {
+            "status": "success",
+            "section_name": section_key,
+            "section_id": memo_section.id,
+            "content": content,
+            "data_sources_used": sources,
+        }
+        
+    except Exception as e:
+        print(f"❌ Error generating short memo section '{section_key}': {str(e)}")
+        
+        memo_section = MemoSection(
+            memo_request_id=memo_request_id,
+            section_name=section_key,
+            content="",
+            status="failed",
+            error_log=str(e)
+        )
+        db.add(memo_section)
+        db.commit()
+        
+        return {
+            "status": "failed",
+            "section_name": section_key,
+            "error": str(e)
         }
 
 def generate_comprehensive_memo(
@@ -404,7 +527,7 @@ def generate_short_memo(
     db: Session,
     memo_request_id: int
 ) -> Dict[str, Any]:
-    """Generate a 1-page memo with 6 key sections"""
+    """Generate a 1-page memo with 8 key sections using proper length constraints"""
     # Define short memo sections first
     short_sections = [
         "problem",
@@ -424,90 +547,90 @@ def generate_short_memo(
             raise ValueError("source_id not found in company_data")
             
         # Build knowledge base
-        knowledge_base, all_sources = build_company_knowledge_base(db, source_id)
+        faiss_index, chunks = build_company_knowledge_base(db, source_id)
+        
+        if not faiss_index:
+            return {
+                "status": "failed",
+                "error": "Failed to build knowledge base from company data",
+                "sections_completed": [],
+                "sections_failed": short_sections
+            }
         
         # Load short memo prompts
         short_prompts = load_short_memo_prompts()
         
         results = {
-            "status": "completed",
+            "status": "in_progress",
+            "total_sections": len(short_sections),
             "sections_completed": [],
             "sections_failed": [],
-            "sources_used": list(all_sources)
+            "generation_summary": {}
         }
         
-        # Generate each section
+        # Generate each section using the new short memo function
         for section_name in short_sections:
             try:
                 prompt = short_prompts.get(section_name, f"Generate content for {section_name}")
                 print(f"Using prompt for {section_name}: {prompt[:50]}...")
                 
-                # Use RAG to get relevant context
-                context_data = retrieve_context_for_section(
-                    section_name,
-                    prompt,
-                    knowledge_base,
-                    all_sources,
-                    company_data.get("company_name", "Unknown Company")
-                )
-                
-                # Generate section content
-                section_result = generate_memo_section_with_rag(
+                # Use the new short memo section generation function
+                section_result = generate_short_memo_section_with_rag(
                     section_name,
                     prompt,
                     company_data,
-                    knowledge_base,
-                    all_sources,
+                    faiss_index,
+                    chunks,
                     db,
                     memo_request_id
                 )
                 
-                print(f"Generated content for {section_name}: {section_result.get('content', 'NO CONTENT')[:100]}...")
-                
-                # Save to database
-                memo_section = MemoSection(
-                    memo_request_id=memo_request_id,
-                    section_name=section_name,
-                    content=section_result["content"],
-                    data_sources=context_data.get('sources', []),
-                    status="completed"
-                )
-                db.add(memo_section)
-                db.commit()
-                
-                print(f"✅ Saved {section_name} to database")
-                results["sections_completed"].append(section_name)
+                if section_result["status"] == "success":
+                    print(f"✅ Generated short memo section '{section_name}' successfully")
+                    results["sections_completed"].append(section_result)
+                else:
+                    print(f"❌ Failed to generate section '{section_name}': {section_result.get('error', 'Unknown error')}")
+                    results["sections_failed"].append(section_result)
                 
             except Exception as e:
-                print(f"Error generating {section_name}: {str(e)}")
-                results["sections_failed"].append(section_name)
-                
-                # Save failed section
-                memo_section = MemoSection(
-                    memo_request_id=memo_request_id,
-                    section_name=section_name,
-                    content="",
-                    status="failed",
-                    error_log=str(e)
-                )
-                db.add(memo_section)
-                db.commit()
+                print(f"❌ Error generating {section_name}: {str(e)}")
+                results["sections_failed"].append({
+                    "status": "failed",
+                    "section_name": section_name,
+                    "error": str(e)
+                })
         
         # Update overall status
-        if results["sections_failed"]:
-            results["status"] = "partial"
-        else:
+        results["total_sections"] = len(results["sections_completed"]) + len(results["sections_failed"])
+        results["success_rate"] = (
+            len(results["sections_completed"]) / results["total_sections"]
+            if results["total_sections"] > 0 else 0
+        )
+        
+        if len(results["sections_failed"]) == 0:
             results["status"] = "completed"
-            
+        elif len(results["sections_completed"]) > 0:
+            results["status"] = "partial_success"
+        else:
+            results["status"] = "failed"
+        
+        results["generation_summary"] = {
+            "total_sections": results["total_sections"],
+            "successful": len(results["sections_completed"]),
+            "failed": len(results["sections_failed"]),
+            "success_rate": f"{results['success_rate']*100:.1f}%"
+        }
+        
+        print(f"Short memo generation completed: {results['success_rate']*100:.1f}% success rate")
+        
         return results
         
     except Exception as e:
-        print(f"Error in generate_short_memo: {str(e)}")
+        print(f"❌ Error in generate_short_memo: {str(e)}")
         return {
             "status": "failed",
             "sections_completed": [],
             "sections_failed": short_sections,
-            "sources_used": [],
             "error": str(e)
         }
 
@@ -536,7 +659,7 @@ def compile_short_memo(db: Session, memo_request_id: int) -> str:
     # Add sections in the correct order
     for section_name in section_order:
         if section_name in section_map:
-            memo_parts.append(f"## {section_name.replace('_', ' ').title()}")
+            memo_parts.append(section_map[section_name].strip())
             memo_parts.append(section_map[section_name])
             
             # Collect sources from this section

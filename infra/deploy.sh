@@ -30,6 +30,7 @@ fi
 gcloud run deploy $SERVICE_NAME \
   --image $IMAGE_URI \
   --region $REGION \
+  --allow-unauthenticated \
   --add-cloudsql-instances=${PROJECT_ID}:${REGION}:icmemo-db \
   --set-env-vars="DATABASE_URL=postgresql://icmemo_user:ilikedeals123%21@/icmemo_db?host=/cloudsql/icmemogenerator-475014:us-central1:icmemo-db,OPENAI_API_KEY=${OPENAI_API_KEY},AFFINITY_API_KEY=${AFFINITY_API_KEY},GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID},GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET},PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY},FRONTEND_URL=https://icmemogenerator.web.app,ALLOWED_DOMAIN=wyldvc.com"
 

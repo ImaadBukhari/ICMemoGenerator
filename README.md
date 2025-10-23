@@ -9,6 +9,7 @@ The IC Memo Generator automates the creation of venture capital investment memos
 - Conducting comprehensive research using Perplexity AI
 - Analyzing emails and documents (Gmail/Google Drive integration)
 - Generating structured IC memos using GPT-4 with RAG (Retrieval-Augmented Generation)
+- Supporting both **full comprehensive memos** and **short 1-page memos**
 - Exporting professional Word documents with proper citations
 
 ## 🏗️ Architecture
@@ -88,7 +89,10 @@ The IC Memo Generator automates the creation of venture capital investment memos
 
 **memo_requests**
 - `id`: Primary key
+- `user_id`: Foreign key to users
 - `source_id`: Foreign key to sources
+- `memo_type`: Type of memo ("full" or "short")
+- `company_name`: Company name for display
 - `status`: Generation status (pending, in_progress, completed, failed)
 - `created_at`: Request timestamp
 - `completed_at`: Completion timestamp
@@ -101,6 +105,32 @@ The IC Memo Generator automates the creation of venture capital investment memos
 - `data_sources`: JSON array of sources used
 - `status`: Section status (pending, completed, failed)
 
+
+## 📄 Memo Types
+
+### Full Comprehensive Memo
+- **Length:** 8-12 pages
+- **Sections:** Executive Summary, Company Snapshot, Team & Leadership, Market Opportunity, Competitive Landscape, Product & Technology, Financial Analysis, Traction & Validation, Deal Considerations
+- **Assessment:** Detailed 1-10 ratings for each category with justification
+- **Format:** Professional Word document with custom styling, assessment table, and sources section
+- **Use case:** Complete investment committee review, due diligence documentation
+
+### Short 1-Page Memo
+- **Length:** 1 page
+- **Sections:** Problem/Solution table, Company Brief, Startup Overview, Founder Team, Deal & Traction, Competitive Landscape, Remarks
+- **Format:** Concise bullet points and short paragraphs (40-100 words per section)
+- **Use case:** Quick initial assessment, partner updates, preliminary screening
+
+### Key Differences
+
+| Feature | Full Memo | Short Memo |
+|---------|-----------|------------|
+| **Generation Time** | 5-10 minutes | 2-3 minutes |
+| **Token Usage** | ~2000 tokens/section | ~150 tokens/section |
+| **RAG Context** | 8 chunks per section | 4 chunks per section |
+| **System Prompt** | 300-500 words/section | 40-100 words/section |
+| **Document Format** | Multi-page with assessment table | Single page with problem/solution table |
+| **Use Case** | Final IC review | Initial screening |
 
 ## 🔧 Configuration & Customization
 
@@ -210,11 +240,17 @@ heading.font.color.rgb = RGBColor(0, 32, 96)
 
 **[`memo_generation_service.py`](backend/services/memo_generation_service.py)** - Core memo generation logic
 - **What it does:** Orchestrates the entire memo generation process using RAG
+- **Key functions:**
+  - `generate_comprehensive_memo()`: Full 8-12 page memos
+  - `generate_short_memo()`: 1-page concise memos
+  - `generate_memo_section_with_rag()`: Full memo sections (2000 tokens)
+  - `generate_short_memo_section_with_rag()`: Short memo sections (150 tokens)
 - **When to modify:**
   - Change system prompts or firm investment philosophy
   - Adjust reasoning frameworks for analytical sections
   - Modify temperature/token limits for GPT
   - Change section generation order or add new sections
+  - Adjust short memo length constraints (currently 40-100 words)
 
 **[`rag_service.py`](backend/services/rag_service.py)** - Retrieval-Augmented Generation
 - **What it does:** Creates embeddings, builds FAISS index, retrieves relevant context
@@ -252,12 +288,17 @@ heading.font.color.rgb = RGBColor(0, 32, 96)
 
 **[`document_service.py`](backend/services/document_service.py)** - Word document generation
 - **What it does:** Compiles memo sections into formatted .docx files
+- **Key functions:**
+  - `generate_word_document()`: Full memo with assessment table
+  - `generate_short_word_document()`: 1-page memo with problem/solution table
+  - `add_short_problem_solution_table()`: Creates 1:5 ratio table (1" headers, 5" content)
 - **When to modify:**
   - Change document styling (fonts, colors, spacing)
   - Modify section order or headers
   - Add/remove sections from final document
   - Change citation formatting
   - Add company logo or custom headers/footers
+  - Adjust table column ratios (currently 1:5 for short memos)
 
 **[`google_service.py`](backend/services/google_service.py)** - Google Drive/Docs/Gmail integration
 - **What it does:** Searches Drive for files, extracts content, analyzes emails
@@ -426,6 +467,23 @@ alembic upgrade head
 2. [`backend/services/perplexity_service.py`](backend/services/perplexity_service.py) - Change `extract_citations_from_content()`
 3. [`backend/services/document_service.py`](backend/services/document_service.py) - Modify `add_sources_section()`
 
+### Scenario 8: Adjust Short Memo Length Constraints
+
+**Files to modify:**
+1. [`backend/services/memo_generation_service.py`](backend/services/memo_generation_service.py) - Modify `generate_short_memo_section_with_rag()`:
+   - Change `max_tokens=150` to desired token limit
+   - Adjust system message for different length requirements
+   - Modify `top_k=4` for RAG context retrieval
+2. [`backend/schemas/memo_prompts.json`](backend/schemas/memo_prompts.json) - Update word count specifications in prompts
+
+### Scenario 9: Customize Table Column Ratios
+
+**Files to modify:**
+1. [`backend/services/document_service.py`](backend/services/document_service.py) - Modify `add_short_problem_solution_table()`:
+   - Change `table.columns[0].width = Inches(1.0)` for header column
+   - Change `table.columns[1].width = Inches(5.0)` for content column
+   - Adjust `table.width = Inches(6.0)` to match total width
+
 ## 🚀 Deployment
 
 ### Prerequisites
@@ -433,11 +491,32 @@ alembic upgrade head
 - Google Cloud Platform account with billing enabled
 - Firebase account (uses same GCP project)
 - Domain name (optional, for custom URLs)
+- Docker installed locally
+- Node.js 16+ installed
 
-### Quick Deployment (What You Actually Do)
+### Quick Deployment
 
 #### 1. Backend Deployment to Cloud Run
 
+**From the root directory, run:**
+```bash
+./infra/deploy.sh
+```
+
+**For Windows users, modify `infra/deploy.sh` first:**
+```bash
+# Change line endings and paths if needed
+# The script uses Unix commands - you may need to adjust for Windows
+```
+
+**What the deploy script does:**
+- ✅ Builds Docker image for backend
+- ✅ Deploys to Google Cloud Run
+- ✅ Configures environment variables from Secret Manager
+- ✅ Sets up Cloud SQL connection
+- ✅ Configures CPU, memory, and scaling limits
+
+**Manual deployment (if script fails):**
 ```bash
 # One-time setup: Store secrets in Secret Manager
 echo -n "YOUR_OPENAI_API_KEY" | gcloud secrets create openai-api-key --data-file=-
@@ -448,37 +527,29 @@ echo -n "YOUR_GOOGLE_CLIENT_SECRET" | gcloud secrets create google-client-secret
 echo -n "RANDOM_JWT_SECRET" | gcloud secrets create jwt-secret-key --data-file=-
 echo -n "YOUR_DB_PASSWORD" | gcloud secrets create db-password --data-file=-
 
-# Build the Docker image
-cd backend
-gcloud builds submit --tag gcr.io/$(gcloud config get-value project)/icmemo-backend
+# Build and deploy from root directory
 
-# Deploy (using the script)
-cd ../infra
-chmod +x deploy.sh
-./deploy.sh
+./infra/deploy.sh
 ```
 
-That's it! The [`deploy.sh`](infra/deploy.sh) script handles:
-- ✅ Pulling secrets from Secret Manager
-- ✅ Deploying to Cloud Run with all environment variables
-- ✅ Configuring Cloud SQL connection
-- ✅ Setting CPU, memory, and scaling limits
-
-**Your backend is now live!** Get the URL:
+**Get your backend URL:**
 ```bash
 gcloud run services describe icmemo-backend --region us-central1 --format='value(status.url)'
 ```
 
 #### 2. Frontend Deployment to Firebase Hosting
 
+**One-time setup:**
 ```bash
-# One-time setup
 cd frontend
 npm install -g firebase-tools
 firebase login
 firebase init hosting
 # Select: build, Yes (SPA), No (GitHub), No (overwrite)
+```
 
+**Deploy frontend:**
+```bash
 # Get backend URL
 BACKEND_URL=$(gcloud run services describe icmemo-backend --region us-central1 --format='value(status.url)')
 
@@ -491,6 +562,29 @@ firebase deploy --only hosting
 ```
 
 **Your frontend is now live at** `https://YOUR-PROJECT.web.app`!
+
+### Environment Variables Setup
+
+**Required secrets in Google Secret Manager:**
+- `openai-api-key`: Your OpenAI API key
+- `perplexity-api-key`: Your Perplexity API key  
+- `affinity-api-key`: Your Affinity CRM API key
+- `google-client-id`: Google OAuth client ID
+- `google-client-secret`: Google OAuth client secret
+- `jwt-secret-key`: Random string for JWT signing
+- `db-password`: Database password
+
+**Frontend environment variables:**
+- `REACT_APP_API_URL`: Your Cloud Run backend URL
+- 'REACT_APP_GOOGLE_CLIENT_ID': Google OAuth client ID
+
+### Windows-Specific Notes
+
+**If running on Windows:**
+1. Install Git Bash or WSL for Unix commands
+2. Modify `infra/deploy.sh` to use Windows-compatible commands
+3. Use PowerShell for gcloud commands if needed
+4. Ensure Docker Desktop is running
 
 
 
