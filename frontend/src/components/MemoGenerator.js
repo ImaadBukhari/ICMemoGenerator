@@ -16,49 +16,36 @@ function MemoGenerator() {
 
   const pollingIntervalRef = useRef(null);
 
-  const handleGenerate = async (companyName, description) => {
+  const handleGenerate = async (companyName, affinityId, description, memoType = 'full') => {
     setStage('loading');
     setCurrentSection('Gathering company data...');
     setProgress(0);
     setCompletedSections(0);
     
-    // Always use full memo (15 sections)
-    setTotalSections(15);
+    // Set total sections based on memo type
+    const totalSectionsCount = memoType === 'short' ? 8 : 15;
+    setTotalSections(totalSectionsCount);
 
     try {
-      // 1️⃣ Gather company data (Affinity ID is now auto-discovered)
+      // 1️⃣ Gather company data
       const { data: gatherData } = await api.post('/data/gather', {
         company_name: companyName,
+        company_id: affinityId,
         description: description,
       });
 
-      // Debug logging
-      console.log('Gather data response:', gatherData);
-      console.log('Source ID:', gatherData.source_id, 'Type:', typeof gatherData.source_id);
-
-      // Validate source_id exists
-      if (!gatherData.source_id) {
-        const errorMsg = gatherData.errors && gatherData.errors.length > 0 
-          ? `Data gathering failed: ${gatherData.errors.join(', ')}`
-          : 'Error: No source ID returned from data gathering. Please check the console for details.';
-        console.error('Missing source_id. Full response:', gatherData);
-        alert(errorMsg);
-        setStage('input');
-        return;
-      }
-
       setCurrentSection('Starting memo generation...');
 
-      // 2️⃣ Start memo generation (always use 'full' type)
+      // 2️⃣ Start memo generation
       const { data: memoResult } = await api.post('/memo/generate', {
         source_id: gatherData.source_id,
-        memo_type: 'full',
+        memo_type: memoType,
       });
 
       const memoId = memoResult.memo_request_id;
 
       // 3️⃣ Begin polling progress
-      startPolling(memoId, companyName);
+      startPolling(memoId, companyName, memoType);
 
     } catch (error) {
       console.error('Error:', error);
@@ -67,22 +54,24 @@ function MemoGenerator() {
     }
   };
 
-  // Poll memo progress (always full memo)
-  const startPolling = (memoId, companyName) => {
+  // Poll memo progress
+  const startPolling = (memoId, companyName, memoType = 'full') => {
     pollingIntervalRef.current = setInterval(async () => {
       try {
         const { data } = await api.get(`/memo/${memoId}/sections`);
         const sections = data.sections || [];
 
-        const totalSectionsCount = 15; // Always 15 for full memo
+        const totalSectionsCount = memoType === 'short' ? 8 : 15;
         const completed = sections.filter(s => s.status === 'completed').length;
         const progressPercent = (completed / totalSectionsCount) * 100;
 
         setCompletedSections(completed);
         setProgress(progressPercent);
 
-        // Always use full memo sections
-        const expectedSections = [
+        const expectedSections = memoType === 'short' ? [
+          'problem', 'solution', 'company_brief', 'startup_overview', 'founder_team',
+          'deal_traction', 'competitive_landscape', 'remarks'
+        ] : [
           'executive_summary', 'company_snapshot', 'people', 'market_opportunity',
           'competitive_landscape', 'product', 'financial', 'traction_validation',
           'deal_considerations', 'assessment_people', 'assessment_market_opportunity',
@@ -139,6 +128,14 @@ function MemoGenerator() {
       assessment_financials: 'Scorecard: Financial',
       assessment_traction_validation: 'Scorecard: Traction',
       assessment_deal_considerations: 'Scorecard: Deal',
+      // Short memo sections
+      problem: 'Problem',
+      solution: 'Solution',
+      company_brief: 'Company Brief',
+      startup_overview: 'Startup Overview',
+      founder_team: 'Founder Team',
+      deal_traction: 'Deal & Traction',
+      remarks: 'Remarks',
     };
 
     return sectionNames[sectionKey] || sectionKey
