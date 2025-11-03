@@ -16,13 +16,13 @@ from backend.services.data_gathering_service import (
 router = APIRouter()
 
 class DataGatheringRequest(BaseModel):
-    company_id: str
     company_name: str
     description: Optional[str] = None
+    company_id: Optional[str] = None  # Optional - will auto-discover if not provided
 
 class DataGatheringResponse(BaseModel):
     company_name: str
-    company_id: str
+    company_id: Optional[str] = None  # May be None if auto-discovery failed
     affinity_success: bool
     drive_success: bool
     perplexity_success: bool
@@ -54,9 +54,9 @@ async def gather_company_data(
         result = gather_and_store_company_data(
             user=current_user,
             db=db,
-            company_id=request.company_id,
             company_name=request.company_name,
-            description=request.description
+            description=request.description,
+            company_id=request.company_id  # Optional - auto-discovered if None
         )
         return DataGatheringResponse(**result)
     except Exception as e:

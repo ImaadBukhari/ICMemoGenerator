@@ -1,9 +1,9 @@
 import os
 import requests
+import re
 from typing import Dict, Any, List, Optional
 from dotenv import load_dotenv
 import logging
-from typing import Optional
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -84,7 +84,108 @@ class AffinityService:
 
 def get_company_details(company_id: str):
     """Get details for a single company by ID."""
-    url = f"{BASE_URL}/companies/{company_id}/list-entries"
+    url = f"{BASE_URL}/organizations/{company_id}"
     resp = requests.get(url, headers=HEADERS, timeout=30)
     resp.raise_for_status()
     return resp.json()
+
+def get_list_entries(list_id: int) -> List[Dict[str, Any]]:
+    """
+    Get all list entries from a specific Affinity list.
+    Returns list of organizations with their data.
+    """
+    try:
+        url = f"{BASE_URL}/lists/{list_id}/list-entries"
+        all_entries = []
+        page = 1
+        page_size = 500
+        
+        while True:
+            params = {"page": page, "page_size": page_size}
+            response = requests.get(url, headers=HEADERS, params=params, timeout=30)
+            response.raise_for_status()
+            
+            data = response.json()
+            entries = data.get("list_entries", [])
+            
+            if not entries:
+                break
+            
+            all_entries.extend(entries)
+            
+            # Check if there are more pages
+            if len(entries) < page_size:
+                break
+            
+            page += 1
+        
+        return all_entries
+        
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error getting list entries from Affinity: {e}")
+        raise
+
+def find_company_by_url(list_id: int, company_url: str) -> Optional[Dict[str, Any]]:
+    """
+    Find a company in a specific Affinity list by matching URL.
+    Returns company data if found, None otherwise.
+    """
+    try:
+        # Normalize the URL for comparison (remove protocol, www, trailing slashes)
+        def normalize_url(url: str) -> str:
+            if not url:
+                return ""
+            url = url.lower().strip()
+            # Remove protocol
+            url = re.sub(r'^https?://', '', url)
+            # Remove www.
+            url = re.sub(r'^www\.', '', url)
+            # Remove trailing slash
+            url = url.rstrip('/')
+            return url
+        
+        normalized_search_url = normalize_url(company_url)
+        
+        if not normalized_search_url:
+            return None
+        
+        # Get all entries from the list
+        entries = get_list_entries(list_id)
+        
+        # Search through entries to find matching organization
+        for entry in entries:
+            organization_id = entry.get("entity_id")
+            if not organization_id:
+                continue
+            
+            # Get full organization data
+            try:
+                org_url = f"{BASE_URL}/organizations/{organization_id}"
+                org_response = requests.get(org_url, headers=HEADERS, timeout=30)
+                org_response.raise_for_status()
+                org_data = org_response.json()
+                
+                # Check if the organization's domain matches
+                domain = org_data.get("domain", "").lower().strip()
+                if domain:
+                    normalized_domain = normalize_url(domain)
+                    if normalized_domain == normalized_search_url:
+                        return org_data
+                
+                # Also check if URL is in fields
+                fields = org_data.get("fields", [])
+                for field in fields:
+                    field_value = str(field.get("value", "")).lower().strip()
+                    if field_value:
+                        normalized_field = normalize_url(field_value)
+                        if normalized_field == normalized_search_url:
+                            return org_data
+                            
+            except requests.exceptions.RequestException:
+                continue  # Skip this entry if we can't fetch org data
+        
+        return None
+        
+    except Exception as e:
+        logger.error(f"Error finding company by URL: {e}")
+        return None
