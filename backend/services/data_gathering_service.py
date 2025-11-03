@@ -1,9 +1,9 @@
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 from sqlalchemy.orm import Session
 from backend.db.models import User, Source
-from backend.services.affinity_service import get_company_details, find_company_by_url
+from backend.services.affinity_service import get_company_details
 from backend.services.google_service import search_files, get_docs_service
-from backend.services.perplexity_service import search_company_comprehensive, get_company_website
+from backend.services.perplexity_service import search_company_comprehensive
 
 import os
 
@@ -129,19 +129,18 @@ def gather_perplexity_data(company_name: str, description: str = None) -> Dict[s
 def gather_and_store_company_data(
     user: User,
     db: Session,
+    company_id: str,
     company_name: str,
-    description: str = None,
-    company_id: Optional[str] = None
+    description: str = None  
 ) -> Dict[str, Any]:
     """
     Gather company data from multiple sources and store in database.
-    Auto-discovers Affinity company by URL if company_id not provided.
     """
     errors = []
     
     results = {
         "company_name": company_name,
-        "company_id": None,
+        "company_id": company_id,
         "affinity_success": False,
         "drive_success": False,
         "perplexity_success": False,
@@ -149,54 +148,21 @@ def gather_and_store_company_data(
         "source_id": None
     }
     
-    # 1. Auto-discover Affinity company if ID not provided
-    discovered_company_id = company_id
+    # 1. Gather Affinity data
+    print(f"Gathering Affinity data for company ID: {company_id}")
+    affinity_result = gather_affinity_data(company_id)
+    results["affinity_success"] = affinity_result["success"]
+    if not affinity_result["success"]:
+        results["errors"].append(f"Affinity error: {affinity_result['error']}")
     
-    if not discovered_company_id:
-        print(f"Auto-discovering Affinity company for: {company_name}")
-        
-        # Step 1: Get company website from Perplexity
-        print("  Getting company website from Perplexity...")
-        company_url = get_company_website(company_name)
-        
-        if not company_url:
-            results["errors"].append("Could not find company website via Perplexity")
-            print("  ❌ Could not find company website")
-        else:
-            print(f"  ✅ Found website: {company_url}")
-            
-            # Step 2: Find company in Affinity list 315335 by URL
-            print("  Searching Affinity list 315335 for matching company...")
-            AFFINITY_LIST_ID = 315335
-            affinity_company = find_company_by_url(AFFINITY_LIST_ID, company_url)
-            
-            if not affinity_company:
-                results["errors"].append(f"Could not find company in Affinity list {AFFINITY_LIST_ID} with URL: {company_url}")
-                print(f"  ❌ Could not find company in Affinity list")
-            else:
-                discovered_company_id = str(affinity_company.get("id"))
-                print(f"  ✅ Found company in Affinity with ID: {discovered_company_id}")
-    
-    # 2. Gather Affinity data (if we have a company ID)
-    if discovered_company_id:
-        results["company_id"] = discovered_company_id
-        print(f"Gathering Affinity data for company ID: {discovered_company_id}")
-        affinity_result = gather_affinity_data(discovered_company_id)
-        results["affinity_success"] = affinity_result["success"]
-        if not affinity_result["success"]:
-            results["errors"].append(f"Affinity error: {affinity_result['error']}")
-    else:
-        print("⚠️ No Affinity company ID available, skipping Affinity data gathering")
-        results["errors"].append("No Affinity company ID found - could not auto-discover")
-    
-    # 3. Gather Google Drive data
+    # 2. Gather Google Drive data
     print(f"Gathering Google Drive data for company: {company_name}")
     drive_result = gather_drive_data(user, db, company_name)
     results["drive_success"] = drive_result["success"]
     if not drive_result["success"]:
         results["errors"].append(f"Google Drive error: {drive_result['error']}")
     
-    # 4. Gather comprehensive Perplexity data with description
+    # 3. Gather comprehensive Perplexity data with description
     print(f"Gathering comprehensive Perplexity data for company: {company_name}")
     if description:
         print(f"  Using description: {description}")
@@ -206,7 +172,7 @@ def gather_and_store_company_data(
         results["errors"].append(f"Perplexity error: {perplexity_result['error']}")
 
 
-    # 5. Store all data in the database
+    # 4. Store all data in the database
     try:
         source = Source(
             user_id=user.id,

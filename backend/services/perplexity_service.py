@@ -14,44 +14,6 @@ def extract_citations_from_content(content: str) -> List[str]:
     citations = re.findall(citation_pattern, content)
     return [url for _, url in citations]
 
-def get_company_website(company_name: str) -> Optional[str]:
-    """
-    Get the company website URL using Perplexity search.
-    Returns just the URL or None if not found.
-    """
-    try:
-        query = f"What is the domain for the startup called {company_name}. Return only the site in full https format"
-        result = perplexity_search(query)
-        
-        if not result.get("search_successful"):
-            return None
-        
-        content = result.get("content", "").strip()
-        
-        # Extract URL from response using regex
-        # Look for URLs in the content
-        url_pattern = r'https?://(?:[-\w.])+(?:[:\d]+)?(?:/(?:[\w/_.])*(?:\?(?:[\w&=%.])*)?(?:#(?:\w)*)?)?'
-        urls = re.findall(url_pattern, content)
-        
-        if urls:
-            # Return the first URL found, stripping any trailing punctuation
-            url = urls[0].rstrip('.,;!?)\'"')
-            # Normalize URL (ensure it starts with http:// or https://)
-            if not url.startswith('http'):
-                url = 'https://' + url
-            return url
-        
-        # Also check citations
-        citations = result.get("citations", [])
-        if citations:
-            return citations[0]
-        
-        return None
-        
-    except Exception as e:
-        print(f"Error getting company website: {str(e)}")
-        return None
-
 def perplexity_search(query: str) -> Dict[str, Any]:
     """Perform a Perplexity search and extract citations"""
     try:
