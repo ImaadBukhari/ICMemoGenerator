@@ -127,86 +127,35 @@ def clean_markdown_formatting(content: str, section_name: str) -> str:
 
 def parse_formatted_content(content: str, section_name: str) -> List[Dict[str, Any]]:
     """
-    Parse content and identify different formatting elements
-    Returns list of content blocks with formatting info
+    Simple parser: Split content into lines and process basic formatting.
+    - Lines starting with #, ##, ###, #### -> bold header (10pt, bold)
+    - Lines with **text** -> paragraph with inline bold
+    - Everything else -> regular paragraph (10pt, not bold)
     """
-    cleaned_content = clean_markdown_formatting(content, section_name)
-    
+    import re
     content_blocks = []
-    lines = cleaned_content.split('\n')
-    current_paragraph = []
+    lines = content.split('\n')
     
-    i = 0
-    while i < len(lines):
-        line = lines[i]
-        stripped_line = line.strip()
+    for line in lines:
+        stripped = line.strip()
         
-        # Handle ### headers - convert to subsection headers (NOT ####)
-        if (stripped_line.startswith('###') and not stripped_line.startswith('####') and 
-            section_name not in ['executive_summary', 'company_snapshot']):
-            # Add current paragraph if exists
-            if current_paragraph:
+        if not stripped:
+            # Empty line - add spacing
+            content_blocks.append({'type': 'paragraph', 'content': ''})
+        elif stripped.startswith('#'):
+            # Hash pattern at line start -> bold header (10pt, bold)
+            text = re.sub(r'^#+\s*', '', stripped)
+            if text:
                 content_blocks.append({
-                    'type': 'paragraph',
-                    'content': '\n'.join(current_paragraph).strip()
+                    'type': 'bold_header',
+                    'content': text
                 })
-                current_paragraph = []
-            
-            # Add subsection header
-            header_text = stripped_line.replace('###', '').strip()
-            if header_text:
-                content_blocks.append({
-                    'type': 'subsection_header',
-                    'content': header_text
-                })
-        
-        # Handle ## headers - convert to subsection headers
-        elif (stripped_line.startswith('##') and section_name not in ['executive_summary', 'company_snapshot']):
-            # Add current paragraph if exists
-            if current_paragraph:
-                content_blocks.append({
-                    'type': 'paragraph',
-                    'content': '\n'.join(current_paragraph).strip()
-                })
-                current_paragraph = []
-            
-            # Add section header
-            header_text = stripped_line.replace('##', '').strip()
-            if header_text:
-                content_blocks.append({
-                    'type': 'subsection_header',
-                    'content': header_text
-                })
-        
-        # Handle #### headers - convert to bold text WITHIN paragraphs (not separate)
-        elif stripped_line.startswith('####'):
-            # Convert #### to **bold** format and add to current paragraph
-            bold_text = stripped_line.replace('####', '').strip()
-            if bold_text:
-                # Add as **bold** text to current paragraph
-                current_paragraph.append(f"**{bold_text}**")
-        
-        # Handle empty lines
-        elif not stripped_line:
-            if current_paragraph:
-                content_blocks.append({
-                    'type': 'paragraph',
-                    'content': '\n'.join(current_paragraph).strip()
-                })
-                current_paragraph = []
-        
-        # Handle regular content lines
         else:
-            current_paragraph.append(line)
-        
-        i += 1
-    
-    # Add final paragraph
-    if current_paragraph:
-        content_blocks.append({
-            'type': 'paragraph',
-            'content': '\n'.join(current_paragraph).strip()
-        })
+            # Regular paragraph - check for inline **text** patterns
+            content_blocks.append({
+                'type': 'paragraph',
+                'content': line
+            })
     
     return content_blocks
 
@@ -512,60 +461,74 @@ def add_header_footer(doc: Document, company_name: str, generation_date: str):
         run.font.name = HEADER_FOOTER_FONT
         run.font.size = Pt(8)
 
+def process_markdown_bold(text: str) -> Tuple[str, List[Tuple[int, int]]]:
+    """
+    Process inline **text** patterns only.
+    Correctly handles character offset when removing markers.
+    
+    Returns:
+        (cleaned_text, bold_ranges) where bold_ranges is a list of (start, end) tuples
+    """
+    import re
+    bold_ranges = []
+    
+    # Find all matches in original text
+    matches = list(re.finditer(r'\*\*([^*]+)\*\*', text))
+    
+    if not matches:
+        return text, []
+    
+    # Build cleaned text and track bold ranges
+    # Process from start to end, building the cleaned text incrementally
+    cleaned_text = ""
+    current_pos = 0
+    
+    for match in matches:
+        match_start = match.start()
+        match_end = match.end()
+        bold_text = match.group(1)
+        
+        # Add text before this match
+        cleaned_text += text[current_pos:match_start]
+        
+        # Track bold range in cleaned_text
+        bold_start = len(cleaned_text)
+        bold_end = bold_start + len(bold_text)
+        bold_ranges.append((bold_start, bold_end))
+        
+        # Add the bold text (without markers)
+        cleaned_text += bold_text
+        
+        # Move past the match in original text
+        current_pos = match_end
+    
+    # Add remaining text after last match
+    cleaned_text += text[current_pos:]
+    
+    # Sort ranges by start position (should already be sorted)
+    bold_ranges.sort(key=lambda x: x[0])
+    
+    return cleaned_text, bold_ranges
+
 def format_section_content(content: str, section_name: str) -> List[Dict[str, Any]]:
     """
-    Format section content into structured blocks with proper formatting
+    Simple formatter: Process content into blocks with basic formatting.
     """
     content_blocks = parse_formatted_content(content, section_name)
     formatted_blocks = []
     
     for block in content_blocks:
-        if block['type'] == 'paragraph' and block['content']:
-            # Handle bullet points
-            lines = block['content'].split('\n')
-            current_list_items = []
-            current_paragraph_lines = []
-            
-            for line in lines:
-                stripped = line.strip()
-                if stripped.startswith('- ') or stripped.startswith('• '):
-                    # Add current paragraph if exists
-                    if current_paragraph_lines:
-                        formatted_blocks.append({
-                            'type': 'paragraph',
-                            'content': '\n'.join(current_paragraph_lines).strip()
-                        })
-                        current_paragraph_lines = []
-                    
-                    # Add to list items
-                    bullet_text = stripped[2:].strip() if stripped.startswith('- ') else stripped[2:].strip()
-                    current_list_items.append(bullet_text)
-                else:
-                    # Add current list if exists
-                    if current_list_items:
-                        formatted_blocks.append({
-                            'type': 'bullet_list',
-                            'items': current_list_items[:]
-                        })
-                        current_list_items = []
-                    
-                    # Add to paragraph
-                    if stripped:  # Only add non-empty lines
-                        current_paragraph_lines.append(line)
-            
-            # Add remaining content
-            if current_list_items:
-                formatted_blocks.append({
-                    'type': 'bullet_list',
-                    'items': current_list_items
-                })
-            if current_paragraph_lines:
-                formatted_blocks.append({
-                    'type': 'paragraph',
-                    'content': '\n'.join(current_paragraph_lines).strip()
-                })
-        
+        if block['type'] == 'paragraph':
+            text = block['content']
+            # Process inline **text** patterns for bold
+            cleaned_text, bold_ranges = process_markdown_bold(text)
+            formatted_blocks.append({
+                'type': 'paragraph',
+                'content': cleaned_text,
+                'bold_ranges': bold_ranges
+            })
         else:
+            # Pass through other block types (bold_header, etc.)
             formatted_blocks.append(block)
     
     return formatted_blocks
@@ -600,6 +563,103 @@ def add_section_to_document(doc: Document, section_name: str, content: str, sect
             for item in block['items']:
                 bullet_para = doc.add_paragraph(style='List Bullet')
                 add_formatted_text_to_paragraph(bullet_para, item, BODY_FONT, BODY_SIZE)
+
+def build_section_blocks(sections_dict: Dict[str, Any], assessment_sections: Dict[str, Any] = None) -> List[Dict[str, Any]]:
+    """
+    Build structured blocks from sections_dict for Google Docs creation.
+    Returns a list of block dicts that can be used by create_google_doc_from_blocks.
+    """
+    blocks = []
+    
+    section_order = {
+        "executive_summary": "Executive Summary",
+        "company_snapshot": "Company Snapshot",
+        "people": "Team & Leadership",
+        "market_opportunity": "Market Opportunity", 
+        "competitive_landscape": "Competitive Landscape",
+        "product": "Product & Technology",
+        "financial": "Financial Analysis",
+        "traction_validation": "Traction & Validation",
+        "deal_considerations": "Deal Considerations"
+    }
+    
+    assessment_mapping = {
+        "assessment_people": "Team & Leadership",
+        "assessment_market_opportunity": "Market Opportunity", 
+        "assessment_product": "Product & Technology",
+        "assessment_financials": "Financial Health",
+        "assessment_traction_validation": "Traction & Validation",
+        "assessment_deal_considerations": "Deal Structure"
+    }
+    
+    # Add Executive Summary first
+    if "executive_summary" in sections_dict:
+        section = sections_dict["executive_summary"]
+        content = section.content if hasattr(section, 'content') else section
+        blocks.append({
+            'type': 'section_heading',
+            'content': 'Executive Summary'
+        })
+        formatted_blocks = format_section_content(content, "executive_summary")
+        blocks.extend(formatted_blocks)
+        blocks.append({'type': 'paragraph', 'content': ''})  # Spacing
+    
+    # Add Assessment Summary as formatted text (not table)
+    if assessment_sections:
+        blocks.append({
+            'type': 'section_heading',
+            'content': 'Investment Assessment Summary'
+        })
+        
+        # Format each assessment as readable text with category, rating, and full justification
+        for section_key, section_title in assessment_mapping.items():
+            if section_key in assessment_sections:
+                section = assessment_sections[section_key]
+                content = section.content if hasattr(section, 'content') else section
+                
+                # Extract rating and full content
+                rating, cleaned_content = extract_rating_from_content(content)
+                
+                # Format as: "Category: Rating\nFull justification text"
+                assessment_text = f"{section_title}"
+                if rating:
+                    assessment_text += f": {rating}"
+                assessment_text += "\n"
+                if cleaned_content:
+                    assessment_text += cleaned_content
+                
+                # Category and rating as bold header (10pt)
+                header_text = section_title
+                if rating:
+                    header_text += f": {rating}"
+                blocks.append({
+                    'type': 'bold_header',
+                    'content': header_text
+                })
+                
+                # Justification as paragraph
+                if cleaned_content:
+                    formatted_blocks = format_section_content(cleaned_content, section_key)
+                    blocks.extend(formatted_blocks)
+        
+        blocks.append({'type': 'paragraph', 'content': ''})  # Spacing
+    
+    # Add main sections in order
+    for section_key, section_title in section_order.items():
+        if section_key in sections_dict and section_key != "executive_summary":
+            section = sections_dict[section_key]
+            content = section.content if hasattr(section, 'content') else section
+            
+            blocks.append({
+                'type': 'section_heading',
+                'content': section_title
+            })
+            
+            formatted_blocks = format_section_content(content, section_key)
+            blocks.extend(formatted_blocks)
+            blocks.append({'type': 'paragraph', 'content': ''})  # Spacing
+    
+    return blocks
 
 def add_sources_section(doc: Document, sections: List):
     """Add a sources/references section at the end of the document"""
@@ -642,6 +702,106 @@ def add_sources_section(doc: Document, sections: List):
         source_para.paragraph_format.left_indent = Inches(0.25)
 
 # Update the generate_word_document function to call this
+
+def generate_google_doc(user, db: Session, sections_dict: Dict[str, Any], company_name: str) -> str:
+    """
+    Generate a Google Doc from memo sections and save it to Investments folder.
+    
+    Args:
+        user: User object (for Drive access)
+        db: Database session
+        sections_dict: Dictionary of section_name -> MemoSection objects
+        company_name: Company name for document title
+        
+    Returns:
+        Google Doc URL
+    """
+    from backend.services.google_service import (
+        get_drive_service, 
+        create_google_doc_from_blocks,
+        _get_drive_id,
+        _get_folder_id
+    )
+    
+    try:
+        print(f"Starting Google Doc generation for {company_name}")
+        
+        # Separate assessment sections from main sections
+        assessment_sections = {k: v for k, v in sections_dict.items() if k.startswith('assessment_')}
+        main_sections_dict = {k: v for k, v in sections_dict.items() if not k.startswith('assessment_')}
+        
+        # Build blocks from sections
+        blocks = build_section_blocks(main_sections_dict, assessment_sections)
+        
+        # Add sources section at the end
+        all_sources = set()
+        for section in sections_dict.values():
+            if hasattr(section, 'data_sources') and section.data_sources:
+                if isinstance(section.data_sources, list):
+                    all_sources.update(section.data_sources)
+        
+        if all_sources:
+            blocks.append({
+                'type': 'heading',
+                'content': 'Sources'
+            })
+            for source in sorted(all_sources):
+                blocks.append({
+                    'type': 'paragraph',
+                    'content': source
+                })
+        
+        # Get Investments folder ID
+        drive_service = get_drive_service(user, db)
+        drive_id = _get_drive_id(drive_service, "Wyld VC")
+        investments_folder_id = _get_folder_id(drive_service, "Investments", drive_id)
+        
+        # Create document title with date in DD/MM/YY format
+        generation_date = datetime.now().strftime("%d/%m/%y")
+        
+        # Add title and subtitle blocks at the beginning
+        header_blocks = [
+            {
+                'type': 'title',
+                'content': f"{company_name} - {generation_date}"
+            },
+            {
+                'type': 'subtitle',
+                'content': 'Series A Memo'
+            },
+            {
+                'type': 'subtitle',
+                'content': 'Deal Team: [To Be Determined]'  # Placeholder for now
+            },
+            {
+                'type': 'paragraph',
+                'content': ''  # Spacing
+            }
+        ]
+        
+        # Prepend header blocks to content blocks
+        blocks = header_blocks + blocks
+        
+        # Create document title for file name
+        doc_title = f"IC Memo: {company_name} - {generation_date}"
+        
+        # Create Google Doc
+        doc_url = create_google_doc_from_blocks(
+            user=user,
+            db=db,
+            title=doc_title,
+            blocks=blocks,
+            parent_folder_id=investments_folder_id
+        )
+        
+        print(f"✅ Google Doc created: {doc_url}")
+        return doc_url
+        
+    except Exception as e:
+        print(f"❌ Error generating Google Doc: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise
 
 def generate_word_document(db: Session, memo_request_id: int) -> Optional[str]:
     """Generate a formatted Word document from memo sections with sources"""
@@ -959,7 +1119,7 @@ def add_short_problem_solution_table(doc: Document, problem_text: str, solution_
 # --------------------------------------------------------------------------
 # 4. Format content parsing utilities (reuse from full memo)
 # --------------------------------------------------------------------------
-def clean_markdown_formatting(content: str) -> str:
+def clean_markdown_formatting_short(content: str) -> str:
     """Simplified markdown cleaner for short memo sections"""
     content = re.sub(r"#+\s*", "", content)  # remove headers
     content = re.sub(r"\*\*([^*]+)\*\*", r"\1", content)  # remove bold markers
@@ -967,9 +1127,9 @@ def clean_markdown_formatting(content: str) -> str:
     return content.strip()
 
 
-def format_section_content(content: str) -> List[str]:
-    """Break section content into bullet-style or paragraph chunks"""
-    content = clean_markdown_formatting(content)
+def format_short_section_content(content: str) -> List[str]:
+    """Break section content into bullet-style or paragraph chunks (for short memos)"""
+    content = clean_markdown_formatting_short(content)
     lines = [l.strip() for l in content.split("\n") if l.strip()]
     return lines
 
@@ -995,7 +1155,7 @@ def add_short_section(doc: Document, section: MemoSection):
     if not section or not section.content:
         return
 
-    lines = format_section_content(section.content)
+    lines = format_short_section_content(section.content)
     for line in lines:
         # detect bullet or paragraph
         if line.startswith("- ") or line.startswith("• "):

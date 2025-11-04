@@ -22,9 +22,8 @@ function MemoGenerator() {
     setProgress(0);
     setCompletedSections(0);
     
-    // Set total sections based on memo type
-    const totalSectionsCount = memoType === 'short' ? 8 : 15;
-    setTotalSections(totalSectionsCount);
+    // Always use full memo (15 sections)
+    setTotalSections(15);
 
     try {
       // 1️⃣ Gather company data
@@ -36,16 +35,16 @@ function MemoGenerator() {
 
       setCurrentSection('Starting memo generation...');
 
-      // 2️⃣ Start memo generation
+      // 2️⃣ Start memo generation (always use 'full' type)
       const { data: memoResult } = await api.post('/memo/generate', {
         source_id: gatherData.source_id,
-        memo_type: memoType,
+        memo_type: 'full',
       });
 
       const memoId = memoResult.memo_request_id;
 
       // 3️⃣ Begin polling progress
-      startPolling(memoId, companyName, memoType);
+      startPolling(memoId, companyName);
 
     } catch (error) {
       console.error('Error:', error);
@@ -54,24 +53,22 @@ function MemoGenerator() {
     }
   };
 
-  // Poll memo progress
-  const startPolling = (memoId, companyName, memoType = 'full') => {
+  // Poll memo progress (always full memo)
+  const startPolling = (memoId, companyName) => {
     pollingIntervalRef.current = setInterval(async () => {
       try {
         const { data } = await api.get(`/memo/${memoId}/sections`);
         const sections = data.sections || [];
 
-        const totalSectionsCount = memoType === 'short' ? 8 : 15;
+        const totalSectionsCount = 15; // Always 15 for full memo
         const completed = sections.filter(s => s.status === 'completed').length;
         const progressPercent = (completed / totalSectionsCount) * 100;
 
         setCompletedSections(completed);
         setProgress(progressPercent);
 
-        const expectedSections = memoType === 'short' ? [
-          'problem', 'solution', 'company_brief', 'startup_overview', 'founder_team',
-          'deal_traction', 'competitive_landscape', 'remarks'
-        ] : [
+        // Always use full memo sections
+        const expectedSections = [
           'executive_summary', 'company_snapshot', 'people', 'market_opportunity',
           'competitive_landscape', 'product', 'financial', 'traction_validation',
           'deal_considerations', 'assessment_people', 'assessment_market_opportunity',
@@ -90,7 +87,7 @@ function MemoGenerator() {
         if (data.overall_status === 'completed' || data.overall_status === 'partial_success') {
           clearInterval(pollingIntervalRef.current);
           setProgress(100);
-          setCurrentSection('Creating Word document...');
+          setCurrentSection('Creating Google Doc...');
 
           const { data: docResult } = await api.post(`/memo/${memoId}/generate-document`);
 
@@ -98,7 +95,7 @@ function MemoGenerator() {
             setMemoData({
               memoId,
               companyName,
-              filename: docResult.filename,
+              docUrl: docResult.doc_url || docResult.document_path,
               sections: completed,
             });
             setStage('download');
@@ -128,14 +125,6 @@ function MemoGenerator() {
       assessment_financials: 'Scorecard: Financial',
       assessment_traction_validation: 'Scorecard: Traction',
       assessment_deal_considerations: 'Scorecard: Deal',
-      // Short memo sections
-      problem: 'Problem',
-      solution: 'Solution',
-      company_brief: 'Company Brief',
-      startup_overview: 'Startup Overview',
-      founder_team: 'Founder Team',
-      deal_traction: 'Deal & Traction',
-      remarks: 'Remarks',
     };
 
     return sectionNames[sectionKey] || sectionKey

@@ -1,4 +1,7 @@
 backend/.env
+backend/drive_tokens.json
+backend/token.json
+token.json
 __pycache__/
 /venv
 node_modules/

@@ -114,6 +114,13 @@ Always back claims with specific data and citations [1], [2], etc.
 Avoid marketing language or speculation; use quantitative metrics and relative comparisons (e.g., "30% higher than peers").
 Each section must be self-contained, concise (300–500 words), and logically structured for a reader who will skim.
 End each section with a short insight summary (2–3 sentences) highlighting key implications or open questions.
+
+FORMATTING RULES - STRICTLY FOLLOW:
+- Follow the "TITLE FORMATTING RULES" specified in each section's prompt exactly
+- Use ### only for subsection headers (e.g., ### Founder Background)
+- Use **text** for emphasis within paragraphs
+- Do NOT use ## or #### headers
+- For executive_summary and company_snapshot: NO markdown headers at all, only plain paragraphs
 """
         
         content = generate_text(

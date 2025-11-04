@@ -1,41 +1,11 @@
 // src/components/DownloadScreen.js
-import React, { useState } from "react";
+import React from "react";
 import "./DownloadScreen.css";
-import api from "../api"; // ✅ use authenticated Axios instance
 
 function DownloadScreen({ memoData, onReset }) {
-  const [downloading, setDownloading] = useState(false);
-  const [error, setError] = useState(null);
-
-  const handleDownload = async () => {
-    try {
-      setDownloading(true);
-      setError(null);
-
-      // 1️⃣ Download file via authenticated request
-      const response = await api.get(`/memo/${memoData.memoId}/download`, {
-        responseType: "blob", // ✅ needed for file download
-      });
-
-      // 2️⃣ Create download link
-      const blob = new Blob([response.data]);
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download =
-        memoData.filename ||
-        `IC_Memo_${memoData.companyName.replace(/\s+/g, "_")}.docx`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    } catch (err) {
-      console.error("Download error:", err);
-      setError(
-        err.response?.data?.detail || err.message || "Download failed. Please try again."
-      );
-    } finally {
-      setDownloading(false);
+  const handleOpenDoc = () => {
+    if (memoData.docUrl) {
+      window.open(memoData.docUrl, '_blank');
     }
   };
 
@@ -63,32 +33,37 @@ function DownloadScreen({ memoData, onReset }) {
           <span className="info-label">Sections</span>
           <span className="info-value">{memoData.sections} completed</span>
         </div>
+        <div className="info-item">
+          <span className="info-label">Location</span>
+          <span className="info-value">Google Drive → Investments folder</span>
+        </div>
       </div>
 
-      {error && (
-        <div className="error-message">
-          <span className="error-icon">⚠️</span>
-          <span className="error-text">{error}</span>
-        </div>
-      )}
-
       <div className="action-buttons">
-        <button
-          onClick={handleDownload}
-          className="download-button"
-          disabled={downloading}
-        >
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-            <path
-              d="M10 1v12m0 0l-4-4m4 4l4-4M2 13v4a2 2 0 002 2h12a2 2 0 002-2v-4"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-          {downloading ? "Downloading..." : "Download Memo"}
-        </button>
+        {memoData.docUrl && (
+          <button
+            onClick={handleOpenDoc}
+            className="download-button"
+          >
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+              <path
+                d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            View in Google Docs
+          </button>
+        )}
 
         <button onClick={onReset} className="new-memo-button">
           Generate Another Memo

@@ -1,7 +1,7 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://127.0.0.1:8000/api';
-//const API_BASE_URL = 'https://icmemo-backend-211323749133.us-central1.run.app/api';
+//const API_BASE_URL = 'http://127.0.0.1:8000/api';
+const API_BASE_URL = 'https://icmemo-backend-211323749133.us-central1.run.app/api';
 // Get token from localStorage
 const getAuthToken = () => {
   return localStorage.getItem('authToken');
