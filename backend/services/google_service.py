@@ -23,6 +23,7 @@ DRIVE_TOKEN_SECRET_NAME = os.getenv("DRIVE_TOKEN_SECRET_NAME", "google-drive-oau
 SCOPES = [
     "https://www.googleapis.com/auth/drive.readonly",
     "https://www.googleapis.com/auth/drive.file",
+    "https://www.googleapis.com/auth/drive",  # Full Drive access for domain sharing
     "https://www.googleapis.com/auth/documents"
 ]
 
@@ -30,9 +31,12 @@ def _get_creds_from_secret_manager() -> Optional[Credentials]:
     """
     Get Google Drive credentials from Google Cloud Secret Manager.
     Returns None if Secret Manager is not available or tokens not found.
+    Raises ValueError with detailed error message if Secret Manager access fails.
     """
     if not HAS_SECRET_MANAGER:
-        return None
+        error_msg = "Secret Manager not available (google-cloud-secret-manager not installed)"
+        print(f"⚠️ {error_msg}")
+        raise ValueError(error_msg)
     
     try:
         client = secretmanager.SecretManagerServiceClient()
@@ -40,10 +44,21 @@ def _get_creds_from_secret_manager() -> Optional[Credentials]:
         
         # Get the latest version of the secret
         version_path = f"{secret_path}/versions/latest"
+        print(f"🔍 Attempting to access Secret Manager: {version_path}")
+        print(f"   Project: {GOOGLE_CLOUD_PROJECT}")
+        print(f"   Secret Name: {DRIVE_TOKEN_SECRET_NAME}")
+        
         response = client.access_secret_version(request={"name": version_path})
         
         # Parse token data
         token_data = json.loads(response.payload.data.decode("UTF-8"))
+        print(f"✅ Successfully retrieved token from Secret Manager")
+        
+        # Validate required fields
+        if not token_data.get("token") or not token_data.get("refresh_token"):
+            error_msg = f"Secret Manager token missing required fields (token or refresh_token). Secret: {DRIVE_TOKEN_SECRET_NAME}, Project: {GOOGLE_CLOUD_PROJECT}"
+            print(f"❌ {error_msg}")
+            raise ValueError(error_msg)
         
         # Create credentials object
         creds = Credentials(
@@ -58,31 +73,73 @@ def _get_creds_from_secret_manager() -> Optional[Credentials]:
         # If token expired, refresh it
         if creds.expired and creds.refresh_token:
             try:
+                print("🔄 Refreshing expired Secret Manager token...")
                 creds.refresh(Request())
+                print("✅ Token refreshed successfully")
             except Exception as e:
+                print(f"❌ Failed to refresh Secret Manager token: {str(e)}")
+                import traceback
+                traceback.print_exc()
                 raise ValueError(f"Google Drive token expired and could not be refreshed: {str(e)}")
         
+        print("✅ Using credentials from Secret Manager (investments@wyldvc.com)")
         return creds
         
+    except ValueError:
+        # Re-raise ValueError as-is (these are our validation errors)
+        raise
     except Exception as e:
-        return None
+        error_type = type(e).__name__
+        error_msg = str(e)
+        detailed_error = (
+            f"Secret Manager access failed: {error_type}: {error_msg}. "
+            f"Project: {GOOGLE_CLOUD_PROJECT}, "
+            f"Secret: {DRIVE_TOKEN_SECRET_NAME}. "
+            f"Please verify the secret exists and the Cloud Run service account has 'Secret Manager Secret Accessor' role."
+        )
+        print(f"❌ Secret Manager error: {error_type}: {error_msg}")
+        print(f"   Project: {GOOGLE_CLOUD_PROJECT}")
+        print(f"   Secret Name: {DRIVE_TOKEN_SECRET_NAME}")
+        import traceback
+        traceback.print_exc()
+        raise ValueError(detailed_error)
 
 def _get_user_creds(user: User, db: Session) -> Credentials:
     """
     Build Google Credentials object from Secret Manager or user's stored tokens.
-    Priority: Secret Manager first, then user tokens.
+    Priority: Secret Manager first (investments@wyldvc.com), then user tokens.
     """
-    # Try Secret Manager first (for investments@wyldvc.com shared drive access)
-    secret_manager_creds = _get_creds_from_secret_manager()
-    if secret_manager_creds:
-        return secret_manager_creds
+    # Try Secret Manager first (for investments@wyldvc.com - this is the primary method)
+    secret_manager_error = None
+    try:
+        secret_manager_creds = _get_creds_from_secret_manager()
+        if secret_manager_creds:
+            return secret_manager_creds
+    except ValueError as e:
+        # Capture the Secret Manager error for inclusion in final error message
+        secret_manager_error = str(e)
+        print(f"⚠️ Secret Manager failed: {secret_manager_error}")
     
-    # Fall back to user's stored tokens
+    # Fall back to user's stored tokens (only if Secret Manager fails)
+    print("⚠️ Secret Manager token not available, trying user tokens...")
     token_record = (
         db.query(GoogleToken).filter(GoogleToken.user_id == user.id).first()
     )
     if not token_record:
-        raise ValueError("No Google tokens found for user")
+        error_msg = (
+            "No Google Drive access available. "
+        )
+        if secret_manager_error:
+            error_msg += f"Secret Manager error: {secret_manager_error}. "
+        else:
+            error_msg += (
+                "Secret Manager token (investments@wyldvc.com) is not configured. "
+            )
+        error_msg += (
+            "User has not connected Google Drive. "
+            "Please ensure Secret Manager token is set up correctly in Cloud Secret Manager."
+        )
+        raise ValueError(error_msg)
 
     creds = Credentials(
         token=token_record.access_token,
@@ -100,6 +157,7 @@ def _get_user_creds(user: User, db: Session) -> Credentials:
         token_record.expiry = creds.expiry
         db.commit()
 
+    print("✅ Using user's Google tokens")
     return creds
 
 def get_drive_service(user: User, db: Session):
@@ -539,16 +597,20 @@ def create_google_doc_from_blocks(user: User, db: Session, title: str, blocks: L
     
     # Tables are now handled as formatted text, so no table insertion needed
     
-    # Move document to folder if specified
-    if parent_folder_id:
-        try:
-            drive_service.files().update(
-                fileId=doc_id,
-                addParents=parent_folder_id,
-                supportsAllDrives=True,
-                fields='id, parents'
-            ).execute()
-        except Exception as e:
-            print(f"Warning: Could not move document to folder: {e}")
+    # Share with domain (wyldvc.com) - make it available to anyone in the domain with edit access
+    try:
+        permission = {
+            'type': 'domain',
+            'role': 'writer',
+            'domain': 'wyldvc.com'
+        }
+        drive_service.permissions().create(
+            fileId=doc_id,
+            body=permission,
+            supportsAllDrives=True
+        ).execute()
+        print(f"✅ Document shared with wyldvc.com domain")
+    except Exception as e:
+        print(f"Warning: Could not share document with domain: {e}")
     
     return f"https://docs.google.com/document/d/{doc_id}/edit"

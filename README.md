@@ -10,7 +10,7 @@ The IC Memo Generator automates the creation of venture capital investment memos
 - Analyzing emails and documents (Gmail/Google Drive integration)
 - Generating structured IC memos using GPT-4 with RAG (Retrieval-Augmented Generation)
 - Supporting both **full comprehensive memos** and **short 1-page memos**
-- Exporting professional Word documents with proper citations
+- Creating formatted Google Docs with proper citations and sharing
 
 ## 🏗️ Architecture
 
@@ -23,6 +23,8 @@ The IC Memo Generator automates the creation of venture capital investment memos
 - OpenAI GPT-4 for text generation
 - FAISS for vector similarity search
 - Google OAuth 2.0 for authentication
+- Google Cloud Secret Manager for secure token storage
+- Google Docs API for document generation
 
 **Frontend:**
 - React.js
@@ -112,13 +114,15 @@ The IC Memo Generator automates the creation of venture capital investment memos
 - **Length:** 8-12 pages
 - **Sections:** Executive Summary, Company Snapshot, Team & Leadership, Market Opportunity, Competitive Landscape, Product & Technology, Financial Analysis, Traction & Validation, Deal Considerations
 - **Assessment:** Detailed 1-10 ratings for each category with justification
-- **Format:** Professional Word document with custom styling, assessment table, and sources section
+- **Format:** Professional Google Doc with custom styling (size 12pt headers, size 10pt body text), formatted sections, and sources
+- **Sharing:** Automatically shared with `wyldvc.com` domain with edit access
 - **Use case:** Complete investment committee review, due diligence documentation
 
 ### Short 1-Page Memo
 - **Length:** 1 page
 - **Sections:** Problem/Solution table, Company Brief, Startup Overview, Founder Team, Deal & Traction, Competitive Landscape, Remarks
 - **Format:** Concise bullet points and short paragraphs (40-100 words per section)
+- **Note:** Short memo functionality is currently disabled in the frontend
 - **Use case:** Quick initial assessment, partner updates, preliminary screening
 
 ### Key Differences
@@ -129,7 +133,7 @@ The IC Memo Generator automates the creation of venture capital investment memos
 | **Token Usage** | ~2000 tokens/section | ~150 tokens/section |
 | **RAG Context** | 8 chunks per section | 4 chunks per section |
 | **System Prompt** | 300-500 words/section | 40-100 words/section |
-| **Document Format** | Multi-page with assessment table | Single page with problem/solution table |
+| **Document Format** | Multi-page Google Doc with formatted sections | Single page with problem/solution table (currently disabled) |
 | **Use Case** | Final IC review | Initial screening |
 
 ## 🔧 Configuration & Customization
@@ -286,28 +290,49 @@ heading.font.color.rgb = RGBColor(0, 32, 96)
   - Add error handling for missing data
   - Modify data transformation/cleaning logic
 
-**[`document_service.py`](backend/services/document_service.py)** - Word document generation
-- **What it does:** Compiles memo sections into formatted .docx files
+**[`document_service.py`](backend/services/document_service.py)** - Google Docs generation
+- **What it does:** Compiles memo sections into formatted Google Docs
 - **Key functions:**
-  - `generate_word_document()`: Full memo with assessment table
-  - `generate_short_word_document()`: 1-page memo with problem/solution table
-  - `add_short_problem_solution_table()`: Creates 1:5 ratio table (1" headers, 5" content)
+  - `generate_google_doc()`: Full memo as Google Doc with formatted sections
+  - `build_section_blocks()`: Structures content into blocks for Google Docs API
+  - `parse_formatted_content()`: Parses markdown and detects headings/paragraphs
+  - `process_markdown_bold()`: Handles inline bold formatting (`**text**`)
+- **Document formatting:**
+  - Title: Size 12pt, bold, format: `IC Memo_[company name] DD_MM_YYYY`
+  - Section headers: Size 12pt, bold
+  - Body text: Size 10pt, not bold
+  - Bold headers (subsections): Size 10pt, bold
+  - Inline bold: Detected from `**text**` patterns
 - **When to modify:**
-  - Change document styling (fonts, colors, spacing)
+  - Change document styling (font sizes, bold formatting)
   - Modify section order or headers
   - Add/remove sections from final document
   - Change citation formatting
-  - Add company logo or custom headers/footers
-  - Adjust table column ratios (currently 1:5 for short memos)
+  - Adjust markdown parsing logic
+  - Modify document title format
 
 **[`google_service.py`](backend/services/google_service.py)** - Google Drive/Docs/Gmail integration
-- **What it does:** Searches Drive for files, extracts content, analyzes emails
+- **What it does:** Searches Drive for files, extracts content, analyzes emails, creates Google Docs
+- **Key functions:**
+  - `get_drive_service()`: Returns authenticated Drive service
+  - `get_docs_service()`: Returns authenticated Docs service
+  - `create_google_doc_from_blocks()`: Creates formatted Google Doc from structured blocks
+  - `_get_creds_from_secret_manager()`: Retrieves OAuth tokens from Google Cloud Secret Manager
+  - `_get_user_creds()`: Gets credentials (Secret Manager first, then user tokens)
+- **Authentication:**
+  - Primary: Uses Google Cloud Secret Manager token for `investments@wyldvc.com`
+  - Fallback: User's stored OAuth tokens (if Secret Manager fails)
+  - Required scopes: Drive read, Drive file, full Drive access, Documents
+- **Document sharing:**
+  - Documents are automatically shared with `wyldvc.com` domain with edit access
 - **When to modify:**
   - Add more file types to search for
   - Change search query logic
   - Modify content extraction methods
   - Add email filtering/analysis logic
   - Adjust OAuth scopes
+  - Change document sharing permissions
+  - Modify Google Docs formatting logic
 
 **[`data_gathering_service.py`](backend/services/data_gathering_service.py)** - Orchestrates data collection
 - **What it does:** Coordinates gathering data from all sources (Affinity, Perplexity, Drive, Gmail)
@@ -444,8 +469,13 @@ alembic upgrade head
 ### Scenario 4: Change Document Formatting
 
 **Files to modify:**
-1. [`backend/services/document_service.py`](backend/services/document_service.py) - Modify styling functions
-2. Change fonts, colors, spacing, header/footer content
+1. [`backend/services/document_service.py`](backend/services/document_service.py) - Modify styling functions:
+   - `create_google_doc_from_blocks()`: Adjust font sizes, bold formatting
+   - `parse_formatted_content()`: Change markdown parsing logic
+   - `process_markdown_bold()`: Modify inline bold detection
+2. [`backend/services/google_service.py`](backend/services/google_service.py) - Modify Google Docs API calls:
+   - `create_google_doc_from_blocks()`: Change text styling, paragraph formatting
+   - Document title format: Currently `IC Memo_[company name] DD_MM_YYYY`
 
 ### Scenario 5: Adjust RAG Retrieval
 
@@ -515,6 +545,7 @@ alembic upgrade head
 - ✅ Configures environment variables from Secret Manager
 - ✅ Sets up Cloud SQL connection
 - ✅ Configures CPU, memory, and scaling limits
+- ✅ Installs required packages including `google-cloud-secret-manager`
 
 **Manual deployment (if script fails):**
 ```bash
@@ -527,8 +558,10 @@ echo -n "YOUR_GOOGLE_CLIENT_SECRET" | gcloud secrets create google-client-secret
 echo -n "RANDOM_JWT_SECRET" | gcloud secrets create jwt-secret-key --data-file=-
 echo -n "YOUR_DB_PASSWORD" | gcloud secrets create db-password --data-file=-
 
-# Build and deploy from root directory
+# Google Drive OAuth tokens (generate first using generate_drive_token.py)
+gcloud secrets create google-drive-oauth-tokens --data-file=backend/scripts/drive_tokens.json
 
+# Build and deploy from root directory
 ./infra/deploy.sh
 ```
 
@@ -573,6 +606,23 @@ firebase deploy --only hosting
 - `google-client-secret`: Google OAuth client secret
 - `jwt-secret-key`: Random string for JWT signing
 - `db-password`: Database password
+- `google-drive-oauth-tokens`: JSON object with OAuth tokens for `investments@wyldvc.com` (see below)
+
+**Google Drive OAuth Token Setup:**
+1. Run the token generator script:
+   ```bash
+   cd backend/scripts
+   python generate_drive_token.py
+   ```
+2. This creates `drive_tokens.json` with OAuth tokens
+3. Upload the JSON content to Secret Manager:
+   ```bash
+   gcloud secrets create google-drive-oauth-tokens --data-file=drive_tokens.json
+   # Or if secret already exists:
+   gcloud secrets versions add google-drive-oauth-tokens --data-file=drive_tokens.json
+   ```
+4. Ensure the Cloud Run service account has "Secret Manager Secret Accessor" role
+5. The JSON should contain: `token`, `refresh_token`, `client_id`, `client_secret`, `scopes`
 
 **Frontend environment variables:**
 - `REACT_APP_API_URL`: Your Cloud Run backend URL

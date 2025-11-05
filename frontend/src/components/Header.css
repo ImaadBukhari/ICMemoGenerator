@@ -31,6 +31,28 @@
   gap: 1rem;
 }
 
+.connect-google-btn {
+  padding: 0.5rem 1rem;
+  background: #4285f4;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: background 0.3s;
+}
+
+.connect-google-btn:hover {
+  background: #357ae8;
+}
+
+.google-status {
+  color: #34a853;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
 .user-email {
   color: #666;
   font-size: 0.9rem;

@@ -35,7 +35,7 @@ function DownloadScreen({ memoData, onReset }) {
         </div>
         <div className="info-item">
           <span className="info-label">Location</span>
-          <span className="info-value">Google Drive → Investments folder</span>
+          <span className="info-value">Google Drive (shared with wyldvc.com)</span>
         </div>
       </div>
 
@@ -61,7 +61,7 @@ function DownloadScreen({ memoData, onReset }) {
                 strokeLinejoin="round"
               />
             </svg>
-            View in Google Docs
+            Open Google Doc
           </button>
         )}
 

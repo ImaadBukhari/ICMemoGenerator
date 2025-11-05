@@ -717,10 +717,7 @@ def generate_google_doc(user, db: Session, sections_dict: Dict[str, Any], compan
         Google Doc URL
     """
     from backend.services.google_service import (
-        get_drive_service, 
-        create_google_doc_from_blocks,
-        _get_drive_id,
-        _get_folder_id
+        create_google_doc_from_blocks
     )
     
     try:
@@ -751,11 +748,6 @@ def generate_google_doc(user, db: Session, sections_dict: Dict[str, Any], compan
                     'content': source
                 })
         
-        # Get Investments folder ID
-        drive_service = get_drive_service(user, db)
-        drive_id = _get_drive_id(drive_service, "Wyld VC")
-        investments_folder_id = _get_folder_id(drive_service, "Investments", drive_id)
-        
         # Create document title with date in DD/MM/YY format
         generation_date = datetime.now().strftime("%d/%m/%y")
         
@@ -782,21 +774,32 @@ def generate_google_doc(user, db: Session, sections_dict: Dict[str, Any], compan
         # Prepend header blocks to content blocks
         blocks = header_blocks + blocks
         
-        # Create document title for file name
-        doc_title = f"IC Memo: {company_name} - {generation_date}"
+        # Create document title for file name: IC Memo_[company name] DD_MM_YYYY
+        generation_date_for_filename = datetime.now().strftime("%d_%m_%Y")
+        doc_title = f"IC Memo_{company_name} {generation_date_for_filename}"
         
-        # Create Google Doc
+        # Create Google Doc (no folder, will be in user's Drive root)
         doc_url = create_google_doc_from_blocks(
             user=user,
             db=db,
             title=doc_title,
             blocks=blocks,
-            parent_folder_id=investments_folder_id
+            parent_folder_id=None
         )
         
         print(f"✅ Google Doc created: {doc_url}")
         return doc_url
         
+    except ValueError as e:
+        if "No Google tokens found" in str(e):
+            error_msg = "Google Drive connection required. Please connect your Google account via OAuth to generate documents."
+            print(f"❌ Error generating Google Doc: {error_msg}")
+            raise ValueError(error_msg)
+        else:
+            print(f"❌ Error generating Google Doc: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            raise
     except Exception as e:
         print(f"❌ Error generating Google Doc: {str(e)}")
         import traceback

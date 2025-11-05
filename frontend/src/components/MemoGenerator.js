@@ -89,17 +89,42 @@ function MemoGenerator() {
           setProgress(100);
           setCurrentSection('Creating Google Doc...');
 
-          const { data: docResult } = await api.post(`/memo/${memoId}/generate-document`);
+          try {
+            const { data: docResult } = await api.post(`/memo/${memoId}/generate-document`);
+            
+            if (docResult.error) {
+              // Check if it's a Google Drive access error
+              if (docResult.error.includes('Secret Manager') || 
+                  docResult.error.includes('No Google') ||
+                  docResult.error.includes('Google Drive access')) {
+                alert('Google Drive access error:\n\n' + docResult.error + '\n\nPlease contact the administrator to ensure the Secret Manager token is configured correctly.');
+                setStage('input');
+                return;
+              }
+              throw new Error(docResult.error);
+            }
 
-          setTimeout(() => {
-            setMemoData({
-              memoId,
-              companyName,
-              docUrl: docResult.doc_url || docResult.document_path,
-              sections: completed,
-            });
-            setStage('download');
-          }, 500);
+            setTimeout(() => {
+              setMemoData({
+                memoId,
+                companyName,
+                docUrl: docResult.doc_url || docResult.document_path,
+                sections: completed,
+              });
+              setStage('download');
+            }, 500);
+          } catch (err) {
+            console.error('Document generation error:', err);
+            const errorMsg = err.response?.data?.error || err.message;
+            if (errorMsg.includes('Secret Manager') || 
+                errorMsg.includes('No Google') ||
+                errorMsg.includes('Google Drive access')) {
+              alert('Google Drive access error:\n\n' + errorMsg + '\n\nPlease contact the administrator to ensure the Secret Manager token is configured correctly.');
+            } else {
+              alert(`Error generating document: ${errorMsg}`);
+            }
+            setStage('input');
+          }
         }
       } catch (err) {
         console.error('Polling error:', err);

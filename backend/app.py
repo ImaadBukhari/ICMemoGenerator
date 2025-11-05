@@ -13,6 +13,7 @@ load_dotenv(dotenv_path=env_path)
 
 from backend.db.models import Base
 from backend.auth import router as auth_router
+from backend.routes.auth import router as google_auth_router
 from backend.routes.memo import router as memo_router
 from backend.routes.affinity import router as affinity_router
 from backend.routes.data import router as data_router
@@ -51,6 +52,7 @@ def get_db():
 
 # Include routers
 app.include_router(auth_router, prefix="/api")
+app.include_router(google_auth_router, prefix="/api")  # Google OAuth routes
 app.include_router(memo_router, prefix="/api")
 app.include_router(affinity_router, prefix="/api")
 app.include_router(data_router, prefix="/api")

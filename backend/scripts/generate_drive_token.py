@@ -16,6 +16,7 @@ import json
 from google_auth_oauthlib.flow import InstalledAppFlow
 
 SCOPES = [
+    'https://www.googleapis.com/auth/drive',  # Full Drive access for domain sharing
     'https://www.googleapis.com/auth/drive.readonly',
     'https://www.googleapis.com/auth/documents'
 ]
